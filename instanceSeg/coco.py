@@ -30,7 +30,7 @@ coco_mapping = {
 }
 
 class CocoDetection(data.Dataset):
-    def __init__(self, cfg, split, augment=True, ignore_label=255):
+    def __init__(self, split):
         '''
         path:
             Image: coco/{train/val}2017/*.jpg
@@ -45,16 +45,16 @@ class CocoDetection(data.Dataset):
         self.ids = list(sorted(self.coco.imgs.keys()))
 
         # *  normalization params  * #
-        value_scale = 255
-        mean = [0.485, 0.456, 0.406]
-        mean = [item * value_scale for item in mean]
-        std = [0.229, 0.224, 0.225]
-        std = [item * value_scale for item in std]
+        # value_scale = 255
+        # mean = [0.485, 0.456, 0.406]
+        # mean = [item * value_scale for item in mean]
+        # std = [0.229, 0.224, 0.225]
+        # std = [item * value_scale for item in std]
 
-        self.normalize = aug.Compose([
-            aug.ToTensor(),
-            aug.Normalize(mean=mean, std=std)
-        ])
+        # self.normalize = aug.Compose([
+        #     aug.ToTensor(),
+        #     aug.Normalize(mean=mean, std=std)
+        # ])
 
 
     def __getitem__(self, index: int):
@@ -76,7 +76,7 @@ class CocoDetection(data.Dataset):
 
         # *  Convert  * #
         target['labels'] -=1
-        image, seg, target = self.normalize(image, seg, target)
+        # image, seg, target = self.normalize(image, seg, target)
 
 
         assert image.shape[0] ==3,  f'check image {self.coco.loadImgs(image_id)[0]["file_name"]}'
