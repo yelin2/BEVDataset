@@ -17,7 +17,6 @@ import torch
 from torch.utils import data
 import torch.distributed as dist
 import torch.nn.functional as F
-from . import augmentation as aug
 import copy
 
 
