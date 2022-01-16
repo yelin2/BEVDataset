@@ -90,22 +90,27 @@ def main():
     client.set_timeout(10.0)
 
     try:
-
+        # -----------------------------
+        #           Set world
+        # -----------------------------
         traffic_manager = client.get_trafficmanager(args.tm_port)
         traffic_manager.set_global_distance_to_leading_vehicle(2.0)
         world = client.get_world()
 
-        #! layered map
-        world.unload_map_layer(carla.MapLayer.All)
-        # world.unload_map_layer(carla.MapLayer.ParkedVehicles)
-        # world.unload_map_layer(carla.MapLayer.Props)
-        # world.unload_map_layer(carla.MapLayer.StreetLights)
-        # world.unload_map_layer(carla.MapLayer.Decals)
-        # world.unload_map_layer(carla.MapLayer.Buildings)
-        # world.unload_map_layer(carla.MapLayer.Decals)
+        
+        # -----------------------------
+        #       Set layered map
+        # -----------------------------
+        world.unload_map_layer(carla.MapLayer.ParkedVehicles)
+        world.unload_map_layer(carla.MapLayer.Props)
+        world.unload_map_layer(carla.MapLayer.StreetLights)
+        world.unload_map_layer(carla.MapLayer.Decals)
+        world.unload_map_layer(carla.MapLayer.Foliage)
 
-        # world.unload_map_layer(carla.MapLayer.Particles)
  
+        # ----------------------------------------------------------
+        #       Get blueprints & spawn points from CARLA map
+        # ----------------------------------------------------------
         print('\nRUNNING in synchronous mode\n')
         settings = world.get_settings()
         traffic_manager.set_synchronous_mode(True)
@@ -134,11 +139,9 @@ def main():
         FutureActor = carla.command.FutureActor
 
 
-        
-
-        # --------------
-        # Spawn vehicles
-        # --------------
+        # ----------------------------
+        # Spawn simulators vehicles
+        # ----------------------------
         batch = []
         for n, transform in enumerate(spawn_points):
             if n >= args.number_of_vehicles:
@@ -162,21 +165,19 @@ def main():
 
         print('Created %d npc vehicles \n' % len(vehicles_list))
         
-        # -------------
+
+        # --------------------------
         # Spawn Walkers
-        # -------------
-        # blueprintsWalkers = get_actor_blueprints(world, 'walker.pedestrian.*', '2')
+        # --------------------------
         blueprintsWalkers = world.get_blueprint_library().filter('walker.*')
-
         walkers_list = []
-
 
         # some settings
         percentagePedestriansRunning = 0.0      # how many pedestrians will run
-        percentagePedestriansCrossing = 0.0     # how many pedestrians will walk through the road
         if 0:
             world.set_pedestrians_seed(0)
             random.seed(0)
+
         # 1. take all the random locations to spawn
         spawn_points_w = []
         for i in range(100):
@@ -185,6 +186,7 @@ def main():
             if (loc != None):
                 spawn_point.location = loc
                 spawn_points_w.append(spawn_point)
+
         # 2. we spawn the walker object
         batch = []
         walker_speed = []
@@ -264,40 +266,10 @@ def main():
         idx = idx+1
         print('Depth camera ready')
 
-        # Spawn segmentation camera
-        # if save_segm:
-        segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
-        segm_bp.set_attribute('sensor_tick', str(tick_sensor))
-        segm = world.spawn_actor(segm_bp, cam_transform, attach_to=ego_vehicle)
-        cc_segm = carla.ColorConverter.CityScapesPalette
-        nonvehicles_list.append(segm)
-        segm_queue = queue.Queue()
-        segm.listen(segm_queue.put)
-        q_list.append(segm_queue)
-        segm_idx = idx
-        idx = idx+1
-        print('Segmentation camera ready')
 
-        # Spawn LIDAR sensor
-        if save_lidar:
-            lidar_bp = world.get_blueprint_library().find('sensor.lidar.ray_cast')
-            lidar_bp.set_attribute('sensor_tick', str(tick_sensor))
-            lidar_bp.set_attribute('channels', '64')
-            lidar_bp.set_attribute('points_per_second', '1120000')
-            lidar_bp.set_attribute('upper_fov', '30')
-            lidar_bp.set_attribute('range', '100')
-            lidar_bp.set_attribute('rotation_frequency', '20')
-            lidar_transform = carla.Transform(carla.Location(x=0, z=4.0))
-            lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=ego_vehicle)
-            nonvehicles_list.append(lidar)
-            lidar_queue = queue.Queue()
-            lidar.listen(lidar_queue.put)
-            q_list.append(lidar_queue)
-            lidar_idx = idx
-            idx = idx+1
-            print('LIDAR ready')
-
-        # Begin the loop
+        # -----------------------------
+        #       Begin the loop
+        # -----------------------------
         time_sim = 0
         while True:
             # Extract the available data
@@ -311,12 +283,14 @@ def main():
                 # Skip if any sensor data is not available
                 if None in data:
                     continue
+
                 walkers_raw = world.get_actors().filter('walker.*')
                 vehicles_raw = world.get_actors().filter('vehicle.*')
+
+
                 snap = data[tick_idx]
                 rgb_img = data[cam_idx]
                 depth_img = data[depth_idx]
-                segm_img = data[segm_idx]
                 
                 # Attach additional information to the snapshot
                 walkers = cva.snap_processing(walkers_raw, snap)
@@ -333,61 +307,17 @@ def main():
                 vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, cam, depth_meter, json_path='vehicle_class_json_file.txt')
                 vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True)
                 
-                #-------------------Segmentation-------------------
 
-                H, W = segm_img.height, segm_img.width
-
-                np_seg = np.frombuffer(segm_img.raw_data, dtype=np.dtype("uint8")) 
-                np_seg = np.reshape(np_seg, (H, W, 4)) # RGBA format
-                np_seg = np_seg[:, :, :3] #  Take only RGB
-
-
-                # initialize lane, road segmentation
-                lane_road_seg = np.zeros((H, W, 3), dtype=np.uint8)
-
-
-                # get lane, road mask
-                lane_mask = (np_seg[:,:,2] == 6)
-                road_mask = (np_seg[:,:,2] == 7)
-
-                # create lane_seg
-                lane_road_seg[lane_mask, :] = (255, 255, 255)
-
-                # lane_seg
-                # lane_im = Image.fromarray(lane_road_seg)
-
-                # create road_seg
-                lane_road_seg[road_mask, :] = (114, 114, 114)
-
-
-                #--------------------------------------------------
                 global log_mutex
                 global v_concat
 
                 log_mutex.acquire()
-                v_concat = cv2.hconcat([vehicle_box_rgb, lane_road_seg])
+                v_concat = vehicle_box_rgb
                 print('main', v_concat.shape)
                 log_mutex.release()
                 
-                
-                # cv2.imshow('detection & segmentation', v_concat)
-
-                
-                
-                # Uncomment if you want to save the data in darknet format
-                #cva.save2darknet(filtered['bbox'], filtered['class'], rgb_img)
-
-                # Save segmentation image
-                if save_segm:
-                    segm_img = data[segm_idx]
-                    segm_img.save_to_disk('out_segm/%06d.png' % segm_img.frame, cc_segm)
-
-                # Save LIDAR data
-                if save_lidar:
-                    lidar_data = data[lidar_idx]
-                    lidar_data.save_to_disk('out_lidar/%06d.ply' % segm_img.frame)
-                
                 time_sim = 0
+
             time_sim = time_sim + settings.fixed_delta_seconds
 
     finally:
@@ -395,10 +325,6 @@ def main():
         try:
             cam.stop()
             depth.stop()
-            if save_segm:
-                segm.stop()
-            if save_lidar:
-                lidar.stop()
         except:
             print("Simulation ended before sensors have been created")
         
@@ -422,26 +348,22 @@ def visualize():
 
         log_mutex.acquire()
         print('vis', v_concat.shape)
-        cv2.imshow('detection & segmentation', v_concat)
+        cv2.imshow('detection', v_concat)
         log_mutex.release()
         cv2.waitKey(10)
 
-
-# if __name__ == '__main__':
 
 v_concat = np.zeros((1200, 800, 3))
 
 try:
     main_ = Thread(target=main)
     main_.start()
-    # main_.join()
-
 
     vis = Thread(target=visualize)
     vis.start()
-    # vis.join()
-    # main()
+
 except KeyboardInterrupt:
     pass
+
 finally:
     print('\ndone.')

@@ -17,3 +17,12 @@ class: road, roadlines
     # new terminal
     cd ~/ws/BEVDataset/generateTarget
     python visSeg.py
+
+
+## 3. Visualize Object Detection
+
+class: pedestrians, vehicles
+
+    # new terminal
+    cd ~/ws/BEVDataset/generateTarget
+    python visDet.py
