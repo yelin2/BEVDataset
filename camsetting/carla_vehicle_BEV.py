@@ -449,7 +449,8 @@ def get_vehicle_class(vehicles, json_path=None):
 #######################################################
 
 ### Use this function to save the rgb image (with and without bounding box) and bounding boxes data 
-def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehicle_class=None, cc_rgb=carla.ColorConverter.Raw, path='', save_patched=False, add_data=None, out_format='pickle', second = False):
+def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehicle_class=None, \
+    cc_rgb=carla.ColorConverter.Raw, path='', save_patched=False, add_data=None, out_format='pickle', second = False, for_vehicle_img = None):
     # carla_img.save_to_disk(path + 'out_rgb/%06d.png' % carla_img.frame, cc_rgb)
     
 
@@ -466,8 +467,9 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
         out_dict['removed_vehicle_class'] = old_vehicle_class
     if add_data is not None:
         out_dict['others'] = add_data
-    if out_format=='json':
-        filename = path + 'walker_bbox/%06d.txt' % carla_img.frame
+    if out_format=='json' and second:
+
+        filename = path + 'walker_bbox/%06d.txt' % for_vehicle_img.frame
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as outfile:
@@ -479,7 +481,7 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
     #     with open(filename, 'w') as outfile:
     #         json.dump(out_dict, outfile, indent=4)   
 
-    if out_format=='json' and second:
+    if out_format=='json' and not second:
         filename = path + 'vehicle_bbox/%06d.txt' % carla_img.frame
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
@@ -497,6 +499,10 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
             v2 = int(crop[1,1])
             crop_bbox = [(u1,v1),(u2,v2)]
             img_draw.rectangle(crop_bbox, outline ="blue")
+        filename = path + 'out_rgb_bbox_vehicle/%06d.png' % for_vehicle_img.frame
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        image.save(filename)
         return(np.array(image))
 
     if save_patched:
@@ -517,6 +523,10 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
             v2 = int(crop[1,1])
             crop_bbox = [(u1,v1),(u2,v2)]
             img_draw.rectangle(crop_bbox, outline ="red")
+        filename = path + 'out_rgb_bbox_walker/%06d.png' % carla_img.frame
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        image.save(filename)
         return(np.array(image))
 
         

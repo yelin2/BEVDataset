@@ -144,11 +144,11 @@ def main():
         world = client.get_world()
 
         #! layered map
-        world.unload_map_layer(carla.MapLayer.Foliage)
-        world.unload_map_layer(carla.MapLayer.ParkedVehicles)
-        world.unload_map_layer(carla.MapLayer.Props)
-        world.unload_map_layer(carla.MapLayer.StreetLights)
-        world.unload_map_layer(carla.MapLayer.Decals)
+        # world.unload_map_layer(carla.MapLayer.Foliage)
+        # world.unload_map_layer(carla.MapLayer.ParkedVehicles)
+        # world.unload_map_layer(carla.MapLayer.Props)
+        # world.unload_map_layer(carla.MapLayer.StreetLights)
+        # world.unload_map_layer(carla.MapLayer.Decals)
         # world.unload_map_layer(carla.MapLayer.Buildings)
         # world.unload_map_layer(carla.MapLayer.Decals)
 
@@ -394,7 +394,8 @@ def main():
                 
 
                 vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, cam, depth_meter, json_path='vehicle_class_json_file.txt')
-                vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True)
+                vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], \
+                    vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True, for_vehicle_img = rgb_img)
                 
                 #-------------------Segmentation-------------------
 
