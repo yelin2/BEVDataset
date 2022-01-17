@@ -50,9 +50,6 @@ save_segm = False
 save_lidar = False
 tick_sensor = 1
 
-log_mutex = Lock()
-v_concat = np.zeros((1200, 800, 3))
-
 
 def main():
 
@@ -115,9 +112,12 @@ def main():
         settings = world.get_settings()
         traffic_manager.set_synchronous_mode(True)
         if not settings.synchronous_mode:
+            synchronous_master = True
             settings.synchronous_mode = True
             settings.fixed_delta_seconds = 0.05
             world.apply_settings(settings)
+        else:
+            synchronous_master = False
 
         blueprints = world.get_blueprint_library().filter('vehicle.*')
 
@@ -131,6 +131,88 @@ def main():
             logging.warning(msg, args.number_of_vehicles, number_of_spawn_points)
             args.number_of_vehicles = number_of_spawn_points
         
+        SpawnActor = carla.command.SpawnActor
+        SetAutopilot = carla.command.SetAutopilot
+        FutureActor = carla.command.FutureActor
+
+        # ----------------------------
+        # Spawn simulators vehicles
+        # ----------------------------
+        batch = []
+        for n, transform in enumerate(spawn_points):
+            if n >= args.number_of_vehicles:
+                break
+            blueprint = random.choice(blueprints)
+            if blueprint.has_attribute('color'):
+                color = random.choice(blueprint.get_attribute('color').recommended_values)
+                blueprint.set_attribute('color', color)
+            if blueprint.has_attribute('driver_id'):
+                driver_id = random.choice(blueprint.get_attribute('driver_id').recommended_values)
+                blueprint.set_attribute('driver_id', driver_id)
+            blueprint.set_attribute('role_name', 'autopilot')
+            batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
+            spawn_points.pop(0)
+
+        for response in client.apply_batch_sync(batch, synchronous_master):
+            if response.error:
+                logging.error(response.error)
+            else:
+                vehicles_list.append(response.actor_id)
+
+        print('Created %d npc vehicles \n' % len(vehicles_list))
+        
+
+        # --------------------------
+        # Spawn Walkers
+        # --------------------------
+        blueprintsWalkers = world.get_blueprint_library().filter('walker.*')
+        walkers_list = []
+
+        # some settings
+        percentagePedestriansRunning = 0.0      # how many pedestrians will run
+        if 0:
+            world.set_pedestrians_seed(0)
+            random.seed(0)
+
+        # 1. take all the random locations to spawn
+        spawn_points_w = []
+        for i in range(100):
+            spawn_point = carla.Transform()
+            loc = world.get_random_location_from_navigation()
+            if (loc != None):
+                spawn_point.location = loc
+                spawn_points_w.append(spawn_point)
+
+        # 2. we spawn the walker object
+        batch = []
+        walker_speed = []
+        for spawn_point in spawn_points_w:
+            walker_bp = random.choice(blueprintsWalkers)
+            # set as not invincible
+            if walker_bp.has_attribute('is_invincible'):
+                walker_bp.set_attribute('is_invincible', 'false')
+            # set the max speed
+            if walker_bp.has_attribute('speed'):
+                if (random.random() > percentagePedestriansRunning):
+                    # walking
+                    walker_speed.append(walker_bp.get_attribute('speed').recommended_values[1])
+                else:
+                    # running
+                    walker_speed.append(walker_bp.get_attribute('speed').recommended_values[2])
+            else:
+                print("Walker has no speed")
+                walker_speed.append(0.0)
+            batch.append(SpawnActor(walker_bp, spawn_point))
+        results = client.apply_batch_sync(batch, True)
+        walker_speed2 = []
+        for i in range(len(results)):
+            if results[i].error:
+                logging.error(results[i].error)
+            else:
+                walkers_list.append({"id": results[i].actor_id})
+                walker_speed2.append(walker_speed[i])
+        walker_speed = walker_speed2
+
 
         # -----------------------------
         # Spawn ego vehicle and cameras
@@ -187,6 +269,7 @@ def main():
         #       Begin the loop
         # -----------------------------
         time_sim = 0
+        cnt = 0
         while True:
             # Extract the available data
             nowFrame = world.tick()
@@ -226,33 +309,31 @@ def main():
 
 
                 # initialize lane, road segmentation
-                lane_road_seg = np.zeros((H, W, 3), dtype=np.uint8)
+                veh_seg = np.zeros((H, W, 3), dtype=np.uint8)
 
 
-                # get lane, road mask
-                lane_mask = (np_seg[:,:,2] == 6)
-                road_mask = (np_seg[:,:,2] == 7)
+                # get vehicle mask
+                vehicle_mask = (np_seg[:,:,2]==10)
 
-                # create lane_seg
-                lane_road_seg[lane_mask, :] = (255, 255, 255)
-
-
-                # create road_seg
-                lane_road_seg[road_mask, :] = (114, 114, 114)
+                
+                # create vehicle_seg
+                veh_seg[vehicle_mask, :] = (200, 200, 200)
 
 
                 # -----------------------------
-                #        Concat RGB, Seg
+                #        Save RGB, Segmentation
                 # -----------------------------
-                global log_mutex
-                global v_concat
+                img_path = '/home/rml/ws/BEVDataset/generateTarget/images/drive_001/'
+                ann_path = '/home/rml/ws/BEVDataset/generateTarget/annotations/segmentation/vehicle/drive_001/'
+                filename = '{0:010d}'.format(cnt)
 
-                log_mutex.acquire()
-                v_concat = cv2.hconcat([np_rgb, lane_road_seg])
-                print('main', v_concat.shape)
-                log_mutex.release()
+                cv2.imwrite(ann_path + f'{filename}.png', veh_seg)
+                cv2.imwrite(img_path + f'{filename}.png', np_rgb)
+                
+                print('saved!')
                 
                 time_sim = 0
+                cnt = cnt + 1
 
             time_sim = time_sim + settings.fixed_delta_seconds
 
@@ -278,30 +359,13 @@ def main():
 
         time.sleep(0.5)
 
-def visualize():
-    while True:
-        global log_mutex
-        global v_concat
-
-        log_mutex.acquire()
-        cv2.imshow('detection & segmentation', v_concat)
-        log_mutex.release()
-        cv2.waitKey(10)
 
 
+if __name__ == '__main__':
+    try:
+        main()
 
-v_concat = np.zeros((1200, 800, 3))
-
-try:
-    # start main_ therad
-    main_ = Thread(target=main)
-    main_.start()
-
-    # start visualization thread
-    vis = Thread(target=visualize)
-    vis.start()
-
-except KeyboardInterrupt:
-    pass
-finally:
-    print('\ndone.')
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print('\ndone.')
