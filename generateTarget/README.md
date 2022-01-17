@@ -1,8 +1,10 @@
 # Generate Target
 
 ## TODO
-1. visualization documentation
-2. define bbox, instance seg target format
+1. ~~visualization documentation~~
+
+2. ~~define bbox, instance seg target format~~
+
 3. coding for save target
 
 
