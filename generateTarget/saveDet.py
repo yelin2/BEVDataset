@@ -20,7 +20,7 @@ try:
 except IndexError:
     pass
 
-import carla
+import carla 
 
 import argparse
 import logging
@@ -32,7 +32,6 @@ import cv2
 import carla_vehicle_BEV as cva
 
 from PIL import Image
-from threading import Thread, Lock
 
 
 def retrieve_data(sensor_queue, frame, timeout=5):
@@ -49,9 +48,6 @@ save_depth = False
 save_segm = False
 save_lidar = False
 tick_sensor = 1
-
-log_mutex = Lock()
-v_concat = np.zeros((1200, 800, 3))
 
 
 def main():
@@ -284,6 +280,7 @@ def main():
         #       Begin the loop
         # -----------------------------
         time_sim = 0
+        cnt = 0
         while True:
             # Extract the available data
             nowFrame = world.tick()
@@ -297,19 +294,24 @@ def main():
                 if None in data:
                     continue
 
-                
                 # -----------------------------
                 #           Get data
                 # -----------------------------
                 snap = data[tick_idx]
-                rgb_img = data[cam_idx]
                 depth_img = data[depth_idx]
                 seg_img = data[segm_idx]
+
+                # segmentation to numpy array
+                H_seg, W_seg = seg_img.height, seg_img.width
+                seg_img = np.frombuffer(seg_img.raw_data, dtype=np.dtype("uint8")) 
+                seg_img = np.reshape(seg_img, (H_seg, W_seg, 4)) # RGBA format
+                seg_img = seg_img[:, :, :3] #  Take only RGB
 
                 
                 # -----------------------------
                 #        Get bounding box
                 # -----------------------------
+
                 depth_meter = cva.extract_depth(depth_img)
                 
                 walkers_raw = world.get_actors().filter('walker.*')
@@ -328,7 +330,6 @@ def main():
                                                                         depth_meter, 
                                                                         cls='vehicle')
 
-
                 # -----------------------------
                 #       Get instance Seg
                 # -----------------------------
@@ -345,23 +346,8 @@ def main():
                                 # + vehicle_removed['class']\
                                 # + walker_removed['class']
 
+                segs = []
 
-                # rgb image to numpy array
-                H_rgb, W_rgb = rgb_img.height, rgb_img.width
-                np_rgb = np.frombuffer(rgb_img.raw_data, dtype=np.dtype("uint8")) 
-                np_rgb = np.reshape(np_rgb, (H_rgb, W_rgb, 4)) # RGBA format
-                np_rgb = np_rgb[:, :, :3] #  Take only RGB
-
-                # segmentation to numpy array
-                H_seg, W_seg = seg_img.height, seg_img.width
-                seg_img = np.frombuffer(seg_img.raw_data, dtype=np.dtype("uint8")) 
-                seg_img = np.reshape(seg_img, (H_seg, W_seg, 4)) # RGBA format
-                seg_img = seg_img[:, :, :3] #  Take only RGB
-
-                assert H_rgb == H_seg
-                assert W_rgb == W_seg
-
-                ins_img = np.zeros((H_rgb, W_rgb, 3), dtype=np.uint8)
                 for bbox, cls in zip(objs['bbox'], objs['class']):
                     
                     # get bbox's left-top, right-bottom
@@ -377,33 +363,30 @@ def main():
                     pix_h += h1
                     pix_w += w1
 
-                    # pix = np.stack([pix_h, pix_w], axis=0)
-                    rand_col = (np.random.randint(low=100, high=255, size=(1, 3))).tolist()[0]
+                    pix = np.stack([pix_h, pix_w], axis=0)
 
-                    ins_img[pix_h, pix_w, :] = rand_col
-                
-                # -----------------------------
-                #           Draw bbox
-                # -----------------------------
-                vehicle_box_rgb = cva.draw_output(rgb_img, 
-                                                objs['bbox'], 
-                                                objs['class'])
-                
-                
+                    segs.append(pix)
+
+                objs['segmentation'] = segs
+
+
 
                 # -----------------------------
-                #     Concat bbox, instance
+                #       Save bbox, instance
                 # -----------------------------
-                global log_mutex
-                global v_concat
 
-                ins = cv2.addWeighted(np_rgb, 0.8, ins_img, 0.5, 0)
-                log_mutex.acquire()
-                v_concat = cv2.hconcat([vehicle_box_rgb, ins])
-                # v_concat = cv2.hconcat([vehicle_box_rgb, ins_img])
-                log_mutex.release()
+                path = '/home/rml/ws/BEVDataset/generateTarget/annotations/ObjectDetection/drive_001/'
+                image_id = '{0:010d}'.format(cnt)
+
+                cva.save_output(objs, 
+                                path=path, 
+                                image_id=image_id, 
+                                out_format='json')
+
+
                 
                 time_sim = 0
+                cnt = cnt + 1
 
             time_sim = time_sim + settings.fixed_delta_seconds
 
@@ -428,28 +411,11 @@ def main():
 
         time.sleep(0.5)
 
-def visualize():
-    while True:
-        global log_mutex
-        global v_concat
+if __name__ == '__main__':
+    try:
+        main()
 
-        log_mutex.acquire()
-        cv2.imshow('detection', v_concat)
-        log_mutex.release()
-        cv2.waitKey(10)
-
-
-v_concat = np.zeros((1200, 800, 3))
-
-try:
-    main_ = Thread(target=main)
-    main_.start()
-
-    vis = Thread(target=visualize)
-    vis.start()
-
-except KeyboardInterrupt:
-    pass
-
-finally:
-    print('\ndone.')
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print('\ndone.')
