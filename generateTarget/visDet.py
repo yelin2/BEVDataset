@@ -266,6 +266,19 @@ def main():
         idx = idx+1
         print('Depth camera ready')
 
+        # Spawn segmentation camera
+        segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
+        segm_bp.set_attribute('sensor_tick', str(tick_sensor))
+        segm = world.spawn_actor(segm_bp, cam_transform, attach_to=ego_vehicle)
+        cc_segm = carla.ColorConverter.CityScapesPalette
+        nonvehicles_list.append(segm)
+        segm_queue = queue.Queue()
+        segm.listen(segm_queue.put)
+        q_list.append(segm_queue)
+        segm_idx = idx
+        idx = idx+1
+        print('Segmentation camera ready')
+
 
         # -----------------------------
         #       Begin the loop
@@ -287,33 +300,130 @@ def main():
                 walkers_raw = world.get_actors().filter('walker.*')
                 vehicles_raw = world.get_actors().filter('vehicle.*')
 
-
+                # -----------------------------
+                #           Get data
+                # -----------------------------
                 snap = data[tick_idx]
                 rgb_img = data[cam_idx]
                 depth_img = data[depth_idx]
+                seg_img = data[segm_idx]
                 
                 # Attach additional information to the snapshot
                 walkers = cva.snap_processing(walkers_raw, snap)
                 vehicles = cva.snap_processing(vehicles_raw, snap)
 
-                # Save depth image, RGB image, and Bounding Boxes data
-                if save_depth:
-                    depth_img.save_to_disk('out_depth/%06d.png' % depth_img.frame, cc_depth_log)
+                
+                # -----------------------------
+                #        Get bounding box
+                # -----------------------------
                 depth_meter = cva.extract_depth(depth_img)
-                walker_filtered, walker_removed =  cva.auto_annotate(walkers, cam, depth_meter, json_path='vehicle_class_json_file.txt')
-                walker_box_rgb = cva.save_output(rgb_img, walker_filtered['bbox'], walker_filtered['class'], walker_removed['bbox'], walker_removed['class'], save_patched=True, out_format='json')
+                json_path = 'vehicle_class_json_file.txt'
+                walker_filtered, walker_removed =  cva.auto_annotate(walkers, 
+                                                                    cam, 
+                                                                    depth_meter, 
+                                                                    json_path=json_path)
+                
+                walker_box_rgb = cva.save_output(rgb_img, 
+                                                walker_filtered['bbox'], 
+                                                walker_filtered['class'], 
+                                                walker_removed['bbox'], 
+                                                walker_removed['class'], 
+                                                save_patched=True, 
+                                                out_format='json')
                 
 
-                vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, cam, depth_meter, json_path='vehicle_class_json_file.txt')
-                vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True)
-                
+                vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, 
+                                                                        cam, 
+                                                                        depth_meter, 
+                                                                        json_path=json_path)
 
+                vehicle_box_rgb = cva.save_output(walker_box_rgb, 
+                                                    vehicle_filtered['bbox'], 
+                                                    vehicle_filtered['class'], 
+                                                    vehicle_removed['bbox'], 
+                                                    vehicle_removed['class'], 
+                                                    save_patched=True, 
+                                                    out_format='json', 
+                                                    second = True)
+                
+                # -----------------------------
+                #       Get instance Seg
+                # -----------------------------
+
+                # rgb image to numpy array
+                H_rgb, W_rgb = rgb_img.height, rgb_img.width
+                np_rgb = np.frombuffer(rgb_img.raw_data, dtype=np.dtype("uint8")) 
+                np_rgb = np.reshape(np_rgb, (H_rgb, W_rgb, 4)) # RGBA format
+                np_rgb = np_rgb[:, :, :3] #  Take only RGB
+
+                # segmentation to numpy array
+                H_seg, W_seg = seg_img.height, seg_img.width
+                seg_img = np.frombuffer(seg_img.raw_data, dtype=np.dtype("uint8")) 
+                seg_img = np.reshape(seg_img, (H_seg, W_seg, 4)) # RGBA format
+                seg_img = seg_img[:, :, :3] #  Take only RGB
+
+                assert H_rgb == H_seg
+                assert W_rgb == W_seg
+
+                # vehicle instance
+                ins_img = np.zeros((H_rgb, W_rgb, 3), dtype=np.uint8)
+                for veh in vehicle_filtered['bbox']:
+                    w1, h1 = int(veh[0,0]), int(veh[0,1])
+                    w2, h2 = int(veh[1,0]), int(veh[1,1])
+
+                    instance_pixel = seg_img[h1:h2, w1:w2, 2] == 10
+                    box_h, box_w = instance_pixel.shape
+                    rand_col = (np.random.randint(low=100, high=255, size=(1, 3))).tolist()[0]
+                    instance_pixel = (1 * (instance_pixel)).reshape(box_h, box_w, 1) * rand_col
+
+                    ins_img[h1:h2, w1:w2, :] = instance_pixel
+                
+                for veh in vehicle_removed['bbox']:
+                    w1, h1 = int(veh[0,0]), int(veh[0,1])
+                    w2, h2 = int(veh[1,0]), int(veh[1,1])
+
+                    instance_pixel = seg_img[h1:h2, w1:w2, 2] == 10
+                    box_h, box_w = instance_pixel.shape
+                    rand_col = (np.random.randint(low=100, high=255, size=(1, 3))).tolist()[0]
+                    instance_pixel = (1 * (instance_pixel)).reshape(box_h, box_w, 1) * rand_col
+
+                    ins_img[h1:h2, w1:w2, :] = instance_pixel
+
+
+                # walker instance
+                for walk in walker_filtered['bbox']:
+                    w1, h1 = int(walk[0,0]), int(walk[0,1])
+                    w2, h2 = int(walk[1,0]), int(walk[1,1])
+
+                    instance_pixel = seg_img[h1:h2, w1:w2, 2] == 4
+                    box_h, box_w = instance_pixel.shape
+                    rand_col = (np.random.randint(low=100, high=255, size=(1, 3))).tolist()[0]
+                    instance_pixel = (1 * (instance_pixel)).reshape(box_h, box_w, 1) * rand_col
+
+                    ins_img[h1:h2, w1:w2, :] = instance_pixel
+                
+                for walk in walker_removed['bbox']:
+                    w1, h1 = int(walk[0,0]), int(walk[0,1])
+                    w2, h2 = int(walk[1,0]), int(walk[1,1])
+
+                    instance_pixel = seg_img[h1:h2, w1:w2, 2] == 4
+                    box_h, box_w = instance_pixel.shape
+                    rand_col = (np.random.randint(low=100, high=255, size=(1, 3))).tolist()[0]
+                    instance_pixel = (1 * (instance_pixel)).reshape(box_h, box_w, 1) * rand_col
+
+                    ins_img[h1:h2, w1:w2, :] = instance_pixel
+
+
+                # -----------------------------
+                #     Concat bbox, instance
+                # -----------------------------
                 global log_mutex
                 global v_concat
 
+                ins = cv2.addWeighted(np_rgb, 0.8, ins_img, 0.5, 0)
                 log_mutex.acquire()
-                v_concat = vehicle_box_rgb
-                print('main', v_concat.shape)
+                v_concat = cv2.hconcat([vehicle_box_rgb, ins])
+                # v_concat = cv2.hconcat([vehicle_box_rgb, ins_img])
                 log_mutex.release()
                 
                 time_sim = 0
@@ -347,7 +457,6 @@ def visualize():
         global v_concat
 
         log_mutex.acquire()
-        print('vis', v_concat.shape)
         cv2.imshow('detection', v_concat)
         log_mutex.release()
         cv2.waitKey(10)

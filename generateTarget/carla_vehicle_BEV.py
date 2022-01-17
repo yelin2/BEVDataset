@@ -454,6 +454,8 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
     if second: 
         image = Image.fromarray(carla_img, 'RGB')
         img_draw = ImageDraw.Draw(image)  
+        bboxes = bboxes + old_bboxes
+        vehicle_class = vehicle_class + old_vehicle_class
         for crop in bboxes:
             u1 = int(crop[0,0])
             v1 = int(crop[0,1])

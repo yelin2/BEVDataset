@@ -1,0 +1,21 @@
+{'bbox': [array([[486.38348354, 188.9236465 ],
+       [492.86743411, 196.11186384]]), 
+       array([[ 300.61218109, -197.84168469],
+       [ 306.82015616, -182.85197569]]), 
+       array([[153.02284856, 166.63744672],
+       [165.25899686, 174.65607192]]), 
+       array([[265.27030229, 168.08564265],
+       [273.31800795, 176.05030699]]), 
+       array([[ 470.18770381, -180.65085509],
+       [ 476.03510881, -159.71164045]]), 
+       array([[266.67584019, 489.03528376],
+       [274.68178891, 499.48820545]])], 
+
+ 'vehicles': [<carla.libcarla.ActorSnapshot object at 0x7f3035862200>, 
+                <carla.libcarla.ActorSnapshot object at 0x7f3035862120>, 
+                <carla.libcarla.ActorSnapshot object at 0x7f303585ad60>, 
+                <carla.libcarla.ActorSnapshot object at 0x7f3035858ac0>, 
+                <carla.libcarla.ActorSnapshot object at 0x7f3035876ba0>, 
+                <carla.libcarla.ActorSnapshot object at 0x7f303587c120>], 
+ 
+ 'class': [9, 9, 9, 9, 9, 9]}
