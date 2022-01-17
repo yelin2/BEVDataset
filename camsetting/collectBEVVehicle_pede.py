@@ -32,6 +32,8 @@ import cv2
 import carla_vehicle_BEV as cva
 
 from PIL import Image
+from PIL import ImageDraw
+
 from threading import Thread, Lock
 
 
@@ -66,7 +68,25 @@ def metersetting(w, h, x_meter, y_meter, fov):
     
     cam_height = x_meter/np.tan(x_rad)
 
-    return cam_height/2, x_meter/w, y_meter/h
+    x_mpp = x_meter/w
+    y_mpp = y_meter/h
+    if w != h:
+        y_meter = (x_meter/w) * h
+        return cam_height/2, x_mpp, y_meter
+
+    return cam_height/2, x_mpp, y_mpp
+
+def carlaimg_to_np(carla_img):
+    carla_img.convert(carla.ColorConverter.Raw)
+    img_bgra = np.array(carla_img.raw_data).reshape((carla_img.height,carla_img.width,4))
+    img_rgb = np.zeros((carla_img.height,carla_img.width,3))
+    img_rgb[:,:,0] = img_bgra[:,:,2]
+    img_rgb[:,:,1] = img_bgra[:,:,1]
+    img_rgb[:,:,2] = img_bgra[:,:,0]
+    img_rgb = np.uint8(img_rgb)
+    image = Image.fromarray(img_rgb, 'RGB')
+    return(np.array(image))
+
 
 
 def main():
@@ -288,7 +308,9 @@ def main():
         # Spawn sensors
         # -----------------------------
 
-        # Spawn RGB camera
+        #---------------------target-----------------------------
+
+        # Spawn target RGB camera
         height, x_m_per_pxl, y_m_per_pxl = metersetting(args.w, args.h, args.x_meter, args.y_meter, args.fov)
         print("meter per pixel: ", x_m_per_pxl, y_m_per_pxl)
         t_sem_location = carla.Location(0,0,height)     #! BEV transform
@@ -308,7 +330,7 @@ def main():
         idx = idx+1
         print('RGB camera ready')
 
-        # Spawn depth camera
+        # Spawn target depth camera
         depth_bp = world.get_blueprint_library().find('sensor.camera.depth')
         depth_bp.set_attribute('sensor_tick', str(tick_sensor))
         depth_bp.set_attribute('image_size_x', str(args.w))
@@ -324,7 +346,7 @@ def main():
         idx = idx+1
         print('Depth camera ready')
 
-        # Spawn segmentation camera
+        # Spawn target segmentation camera
         # if save_segm:
         segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
         segm_bp.set_attribute('sensor_tick', str(tick_sensor))
@@ -340,25 +362,215 @@ def main():
         segm_idx = idx
         idx = idx+1
         print('Segmentation camera ready')
+        #--------------------------------------------------
+        
 
-        # Spawn LIDAR sensor
-        if save_lidar:
-            lidar_bp = world.get_blueprint_library().find('sensor.lidar.ray_cast')
-            lidar_bp.set_attribute('sensor_tick', str(tick_sensor))
-            lidar_bp.set_attribute('channels', '64')
-            lidar_bp.set_attribute('points_per_second', '1120000')
-            lidar_bp.set_attribute('upper_fov', '30')
-            lidar_bp.set_attribute('range', '100')
-            lidar_bp.set_attribute('rotation_frequency', '20')
-            lidar_transform = carla.Transform(carla.Location(x=0, z=4.0))
-            lidar = world.spawn_actor(lidar_bp, lidar_transform, attach_to=ego_vehicle)
-            nonvehicles_list.append(lidar)
-            lidar_queue = queue.Queue()
-            lidar.listen(lidar_queue.put)
-            q_list.append(lidar_queue)
-            lidar_idx = idx
-            idx = idx+1
-            print('LIDAR ready')
+        #-------front-------#
+        car_cam_fov = '70'
+        # Spawn target RGB camera
+        f_sem_location = carla.Location(1.70079118954, 0.0159456324149, 1.51095763913)     #! BEV transform
+        f_sem_rotation = carla.Rotation(0.04612719483860205, -90.32322642770004 + 90, -90.32571568590001+ 90)
+        f_cam_transform = carla.Transform(f_sem_location, f_sem_rotation)
+        f_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        f_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        f_cam_bp.set_attribute('image_size_x', str(args.w))
+        f_cam_bp.set_attribute('image_size_y', str(args.h))
+        f_cam_bp.set_attribute('fov', car_cam_fov)
+        f_cam = world.spawn_actor(f_cam_bp, f_cam_transform, attach_to=ego_vehicle)
+        nonvehicles_list.append(f_cam)
+        f_cam_queue = queue.Queue()
+        f_cam.listen(f_cam_queue.put)
+        q_list.append(f_cam_queue)
+        f_cam_idx = idx
+        idx = idx+1
+        
+        # # Spawn target depth camera
+        # f_depth_bp = world.get_blueprint_library().find('sensor.camera.depth')
+        # f_depth_bp.set_attribute('sensor_tick', str(tick_sensor))
+        # f_depth_bp.set_attribute('image_size_x', str(args.w))
+        # f_depth_bp.set_attribute('image_size_y', str(args.h))
+        # f_depth_bp.set_attribute('fov', car_cam_fov)
+        # f_depth = world.spawn_actor(f_depth_bp, f_cam_transform, attach_to=ego_vehicle)
+        # nonvehicles_list.append(f_depth)
+        # f_depth_queue = queue.Queue()
+        # f_depth.listen(f_depth_queue.put)
+        # q_list.append(f_depth_queue)
+        # f_depth_idx = idx
+        # idx = idx+1
+
+        # # Spawn target segmentation camera
+        # # if save_segm:
+        # f_segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
+        # f_segm_bp.set_attribute('sensor_tick', str(tick_sensor))
+        # f_segm_bp.set_attribute('image_size_x', str(args.w))
+        # f_segm_bp.set_attribute('image_size_y', str(args.h))
+        # f_segm_bp.set_attribute('fov', car_cam_fov)
+        # f_segm = world.spawn_actor(f_segm_bp, f_cam_transform, attach_to=ego_vehicle)
+        # nonvehicles_list.append(f_segm)
+        # f_segm_queue = queue.Queue()
+        # f_segm.listen(f_segm_queue.put)
+        # q_list.append(f_segm_queue)
+        # f_segm_idx = idx
+        # idx = idx+1
+        #--------------------------#
+
+        #-------front_right-------#
+        # Spawn target RGB camera
+        fr_sem_location = carla.Location(1.5508477543, -0.493404796419, 1.49574800619)     #! BEV transform
+        fr_sem_rotation = carla.Rotation(0.5188438566960005, -146.40439790300002 + 90, -90.78202358850001 + 90)
+        fr_cam_transform = carla.Transform(fr_sem_location, fr_sem_rotation)
+        fr_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        fr_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        fr_cam_bp.set_attribute('image_size_x', str(args.w))
+        fr_cam_bp.set_attribute('image_size_y', str(args.h))
+        fr_cam_bp.set_attribute('fov', car_cam_fov)
+        fr_cam = world.spawn_actor(fr_cam_bp, fr_cam_transform, attach_to=ego_vehicle)
+        nonvehicles_list.append(fr_cam)
+        fr_cam_queue = queue.Queue()
+        fr_cam.listen(fr_cam_queue.put)
+        q_list.append(fr_cam_queue)
+        fr_cam_idx = idx
+        idx = idx+1
+        
+        # # Spawn target depth camera
+        # fr_depth_bp = world.get_blueprint_library().find('sensor.camera.depth')
+        # fr_depth_bp.set_attribute('sensor_tick', str(tick_sensor))
+        # fr_depth_bp.set_attribute('image_size_x', str(args.w))
+        # fr_depth_bp.set_attribute('image_size_y', str(args.h))
+        # fr_depth_bp.set_attribute('fov', car_cam_fov)
+        # fr_depth = world.spawn_actor(fr_depth_bp, fr_cam_transform, attach_to=ego_vehicle)
+        # nonvehicles_list.append(fr_depth)
+        # fr_depth_queue = queue.Queue()
+        # fr_depth.listen(fr_depth_queue.put)
+        # q_list.append(fr_depth_queue)
+        # fr_depth_idx = idx
+        # idx = idx+1
+
+        # # Spawn target segmentation camera
+        # # if save_segm:
+        # fr_segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
+        # fr_segm_bp.set_attribute('sensor_tick', str(tick_sensor))
+        # fr_segm_bp.set_attribute('image_size_x', str(args.w))
+        # fr_segm_bp.set_attribute('image_size_y', str(args.h))
+        # fr_segm_bp.set_attribute('fov', car_cam_fov)
+        # fr_segm = world.spawn_actor(fr_segm_bp, fr_cam_transform, attach_to=ego_vehicle)
+        # nonvehicles_list.append(fr_segm)
+        # fr_segm_queue = queue.Queue()
+        # fr_segm.listen(fr_segm_queue.put)
+        # q_list.append(fr_segm_queue)
+        # fr_segm_idx = idx
+        # idx = idx+1
+        #--------------------------#
+
+        #-------front_left-------#
+        # Spawn target RGB camera
+        fl_sem_location = carla.Location(1.52387798135, 0.494631336551, 1.50932822144)     #! BEV transform
+        fl_sem_rotation = carla.Rotation(0.12143609391200118, -34.8390355956 + 90, -89.85977500319999 + 90)
+        #pitch roll yaw
+        fl_cam_transform = carla.Transform(fl_sem_location, fl_sem_rotation)
+        fl_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        fl_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        fl_cam_bp.set_attribute('image_size_x', str(args.w))
+        fl_cam_bp.set_attribute('image_size_y', str(args.h))
+        fl_cam_bp.set_attribute('fov', car_cam_fov)
+        fl_cam = world.spawn_actor(fl_cam_bp, fl_cam_transform, attach_to=ego_vehicle)
+        nonvehicles_list.append(fl_cam)
+        fl_cam_queue = queue.Queue()
+        fl_cam.listen(fl_cam_queue.put)
+        q_list.append(fl_cam_queue)
+        fl_cam_idx = idx
+        idx = idx+1
+        
+        # # Spawn target depth camera
+        # b_depth_bp = world.get_blueprint_library().find('sensor.camera.depth')
+        # b_depth_bp.set_attribute('sensor_tick', str(tick_sensor))
+        # b_depth_bp.set_attribute('image_size_x', str(args.w))
+        # b_depth_bp.set_attribute('image_size_y', str(args.h))
+        # b_depth_bp.set_attribute('fov', car_cam_fov)
+        # b_depth = world.spawn_actor(b_depth_bp, fl_cam_transform, attach_to=ego_vehicle)
+        # nonvehicles_list.append(b_depth)
+        # b_depth_queue = queue.Queue()
+        # b_depth.listen(b_depth_queue.put)
+        # q_list.append(b_depth_queue)
+        # b_depth_idx = idx
+        # idx = idx+1
+
+        # # Spawn target segmentation camera
+        # # if save_segm:
+        # b_segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
+        # b_segm_bp.set_attribute('sensor_tick', str(tick_sensor))
+        # b_segm_bp.set_attribute('image_size_x', str(args.w))
+        # b_segm_bp.set_attribute('image_size_y', str(args.h))
+        # b_segm_bp.set_attribute('fov', car_cam_fov)
+        # b_segm = world.spawn_actor(b_segm_bp, fl_cam_transform, attach_to=ego_vehicle)
+        # nonvehicles_list.append(b_segm)
+        # b_segm_queue = queue.Queue()
+        # b_segm.listen(b_segm_queue.put)
+        # q_list.append(b_segm_queue)
+        # b_segm_idx = idx
+        # idx = idx+1
+        #--------------------------#
+
+        #-------back_right-------#
+        br_sem_location = carla.Location(1.0148780988, -0.480568219723, 1.56239545128)     #! BEV transform
+        br_sem_rotation = carla.Rotation( 0.6190947610589997, 159.200715506 + 90, -90.93206677999999 + 90)#pitch yaw roll
+        br_cam_transform = carla.Transform(br_sem_location, br_sem_rotation)
+        br_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        br_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        br_cam_bp.set_attribute('image_size_x', str(args.w))
+        br_cam_bp.set_attribute('image_size_y', str(args.h))
+        br_cam_bp.set_attribute('fov', car_cam_fov)
+        br_cam = world.spawn_actor(br_cam_bp, br_cam_transform, attach_to=ego_vehicle)
+        nonvehicles_list.append(br_cam)
+        br_cam_queue = queue.Queue()
+        br_cam.listen(br_cam_queue.put)
+        q_list.append(br_cam_queue)
+        br_cam_idx = idx
+        idx = idx+1
+
+        
+        #--------------------------#
+
+        #-------back_left-------#
+        bl_sem_location = carla.Location(1.03569100218, 0.484795032713, 1.59097014818)     #! BEV transform
+        bl_sem_rotation = carla.Rotation(-0.21518275753700122, 18.600246142799996 + 90, -90.91736319750001 + 90)#pitch roll yaw
+        bl_cam_transform = carla.Transform(bl_sem_location, bl_sem_rotation)
+        bl_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        bl_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        bl_cam_bp.set_attribute('image_size_x', str(args.w))
+        bl_cam_bp.set_attribute('image_size_y', str(args.h))
+        bl_cam_bp.set_attribute('fov', car_cam_fov)
+        bl_cam = world.spawn_actor(bl_cam_bp, bl_cam_transform, attach_to=ego_vehicle)
+        nonvehicles_list.append(bl_cam)
+        bl_cam_queue = queue.Queue()
+        bl_cam.listen(bl_cam_queue.put)
+        q_list.append(bl_cam_queue)
+        bl_cam_idx = idx
+        idx = idx+1
+        
+        #--------------------------#
+
+        #-------back-------#
+
+        b_sem_location = carla.Location(0.0283260309358, 0.00345136761476, 1.57910346144)     #! BEV transform
+        b_sem_rotation = carla.Rotation(0.22919685786400154, 89.86124500000001 + 90, -89.0405962694 + 90)#pitch roll yaw
+        b_cam_transform = carla.Transform(b_sem_location, b_sem_rotation)
+        b_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        b_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        b_cam_bp.set_attribute('image_size_x', str(args.w))
+        b_cam_bp.set_attribute('image_size_y', str(args.h))
+        b_cam_bp.set_attribute('fov', '110')
+        b_cam = world.spawn_actor(b_cam_bp, b_cam_transform, attach_to=ego_vehicle)
+        nonvehicles_list.append(b_cam)
+        b_cam_queue = queue.Queue()
+        b_cam.listen(b_cam_queue.put)
+        q_list.append(b_cam_queue)
+        b_cam_idx = idx
+        idx = idx+1
+        
+        #--------------------------#
+
+
 
         # Begin the loop
         time_sim = 0
@@ -380,6 +592,12 @@ def main():
                 rgb_img = data[cam_idx]
                 depth_img = data[depth_idx]
                 segm_img = data[segm_idx]
+                f_rgb = data[f_cam_idx]
+                fr_rgb = data[fr_cam_idx]
+                fl_rgb = data[fl_cam_idx]
+                b_rgb = data[b_cam_idx]
+                br_rgb = data[br_cam_idx]
+                bl_rgb = data[bl_cam_idx]
                 
                 # Attach additional information to the snapshot
                 walkers = cva.snap_processing(walkers_raw, snap)
@@ -427,9 +645,13 @@ def main():
                 #--------------------------------------------------
                 global log_mutex
                 global v_concat
+                global car_camera
 
                 log_mutex.acquire()
                 v_concat = cv2.hconcat([vehicle_box_rgb, lane_road_seg])
+                f_camera = cv2.hconcat([carlaimg_to_np(f_rgb),carlaimg_to_np(fr_rgb),carlaimg_to_np(fl_rgb) ])
+                b_camera = cv2.hconcat([carlaimg_to_np(b_rgb),carlaimg_to_np(br_rgb),carlaimg_to_np(bl_rgb) ])
+                car_camera = cv2.vconcat([f_camera, b_camera])
                 print('main', v_concat.shape)
                 log_mutex.release()
                 
@@ -446,10 +668,6 @@ def main():
                     segm_img = data[segm_idx]
                     segm_img.save_to_disk('out_segm/%06d.png' % segm_img.frame, cc_segm)
 
-                # Save LIDAR data
-                if save_lidar:
-                    lidar_data = data[lidar_idx]
-                    lidar_data.save_to_disk('out_lidar/%06d.ply' % segm_img.frame)
                 
                 time_sim = 0
             time_sim = time_sim + settings.fixed_delta_seconds
@@ -461,8 +679,6 @@ def main():
             depth.stop()
             if save_segm:
                 segm.stop()
-            if save_lidar:
-                lidar.stop()
         except:
             print("Simulation ended before sensors have been created")
         
@@ -483,10 +699,13 @@ def visualize():
     while True:
         global log_mutex
         global v_concat
+        global car_camera
+
 
         log_mutex.acquire()
         # print('vis', v_concat.shape)
         cv2.imshow('detection & segmentation', v_concat)
+        cv2.imshow('car camera', car_camera)
         log_mutex.release()
         cv2.waitKey(10)
 
@@ -494,6 +713,7 @@ def visualize():
 # if __name__ == '__main__':
 
 v_concat = np.zeros((1200, 800, 3))
+car_camera = np.zeros((1200, 800, 3))
 
 try:
     main_ = Thread(target=main)
