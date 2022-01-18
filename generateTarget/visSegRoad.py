@@ -31,8 +31,8 @@ from matplotlib import pyplot as plt
 import cv2
 import carla_vehicle_BEV as cva
 
+import pygame
 from PIL import Image
-from threading import Thread, Lock
 
 
 def retrieve_data(sensor_queue, frame, timeout=5):
@@ -50,12 +50,23 @@ save_segm = False
 save_lidar = False
 tick_sensor = 1
 
-log_mutex = Lock()
-v_concat = np.zeros((1200, 800, 3))
 
 
 def main():
 
+    # -----------------------------
+    #         pygame setting
+    # -----------------------------
+    pygame.init()
+    screen = pygame.display.set_mode((1700,700)) # w, h
+    pygame.display.set_caption('vehicle segmentation')
+    done = True
+    clock = pygame.time.Clock()
+
+
+    # -----------------------------
+    #           argument
+    # -----------------------------
     argparser = argparse.ArgumentParser(
         description=__doc__)
     argparser.add_argument(
@@ -244,20 +255,23 @@ def main():
                 # -----------------------------
                 #        Concat RGB, Seg
                 # -----------------------------
-                global log_mutex
-                global v_concat
-
-                log_mutex.acquire()
                 v_concat = cv2.hconcat([np_rgb, lane_road_seg])
-                print('main', v_concat.shape)
-                log_mutex.release()
+
+                # * Pygame plot * #
+                opencv_image = v_concat[:,:,::-1]  #Since OpenCV is BGR and pygame is RGB, it is necessary to convert it.
+                shape = opencv_image.shape[1::-1]  #OpenCV(height,width,Number of colors), Pygame(width, height)So this is also converted.
+                pygame_image = pygame.image.frombuffer(opencv_image.tostring(), shape, 'RGB')
+
+                screen.blit(pygame_image, (0,0)) # put in the screen
+
+                pygame.display.update() #update
+                clock.tick(60)
                 
                 time_sim = 0
 
             time_sim = time_sim + settings.fixed_delta_seconds
 
     finally:
-        cva.save2darknet(None,None,None,save_train=True)
         try:
             cam.stop()
             if save_segm:
@@ -278,30 +292,11 @@ def main():
 
         time.sleep(0.5)
 
-def visualize():
-    while True:
-        global log_mutex
-        global v_concat
 
-        log_mutex.acquire()
-        cv2.imshow('detection & segmentation', v_concat)
-        log_mutex.release()
-        cv2.waitKey(10)
-
-
-
-v_concat = np.zeros((1200, 800, 3))
-
-try:
-    # start main_ therad
-    main_ = Thread(target=main)
-    main_.start()
-
-    # start visualization thread
-    vis = Thread(target=visualize)
-    vis.start()
-
-except KeyboardInterrupt:
-    pass
-finally:
-    print('\ndone.')
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print('\ndone')

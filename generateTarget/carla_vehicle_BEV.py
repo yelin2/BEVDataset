@@ -443,7 +443,6 @@ def draw_output(carla_img,
         u2 = int(crop[1,0])
         v2 = int(crop[1,1])
         crop_bbox = [(u1,v1),(u2,v2)]
-        print(cls)
         if cls == 'vehicle':
             color = 'yellow'
         elif cls == 'walker':
@@ -451,7 +450,6 @@ def draw_output(carla_img,
         # color = 'red' if (cls == 'vehicle') else 'blue'
         # print(cls, color)
         img_draw.rectangle(crop_bbox, outline = color)
-    print('-------------------------')
     return(np.array(image))
 
 
