@@ -79,6 +79,16 @@ def main():
         default=8000,
         type=int,
         help='port to communicate with TM (default: 8000)')
+    
+    # save path
+    argparser.add_argument(
+        '-data_root', '--data_root',
+        default=None,
+        help='save data path root (defualt: None)')
+    argparser.add_argument(
+        '-scene_num', '--scene_num',
+        default=None,
+        help='driving scene number (defualt: None)')
 
     args = argparser.parse_args()
     
@@ -86,6 +96,9 @@ def main():
     nonvehicles_list = []
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
+
+    assert (args.data_root is not None), 'you need to specify data root path!'
+    assert (args.scene_num is not None), 'you need to specify driving scene number!'
 
     try:
         # -----------------------------
@@ -231,17 +244,27 @@ def main():
                 # get lane, road, vehicle mask
                 lane_mask = (np_seg[:,:,2] == 6)
                 road_mask = (np_seg[:,:,2] == 7)
+                traffic_light_mask = np.logical_or((np_seg[:,:,2]==18), (np_seg[:,:,2]==5))
+                traffic_light_mask = np.logical_or(traffic_light_mask, (np_seg[:,:,2]==12))
+
 
                 # create lane_seg, road_seg
                 lane_road_seg[lane_mask, :] = (255, 255, 255)
                 lane_road_seg[road_mask, :] = (114, 114, 114)
+                lane_road_seg[traffic_light_mask, :] = (100, 100, 100)
 
 
                 # -----------------------------
                 #     Save RGB, Segmentation
                 # -----------------------------
-                img_path = '/home/rml/ws/BEVDataset/generateTarget/images/drive_001/'
-                ann_path = '/home/rml/ws/BEVDataset/generateTarget/annotations/segmentation/road/drive_001/'
+                img_path = args.data_root + args.scene_num + '/image_01/'
+                ann_path = args.data_root + args.scene_num + '/segmentation/static/'
+
+                if not os.path.isdir(img_path):
+                    os.makedirs(img_path)
+                if not os.path.isdir(ann_path):
+                    os.makedirs(ann_path)
+
                 filename = '{0:010d}'.format(cnt)
 
                 cv2.imwrite(ann_path + f'{filename}.png', lane_road_seg)

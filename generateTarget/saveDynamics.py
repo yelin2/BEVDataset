@@ -77,13 +77,25 @@ def main():
         default=8000,
         type=int,
         help='port to communicate with TM (default: 8000)')
-
+    
+    # save path
+    argparser.add_argument(
+        '-data_root', '--data_root',
+        default=None,
+        help='save data path root (defualt: None)')
+    argparser.add_argument(
+        '-scene_num', '--scene_num',
+        default=None,
+        help='driving scene number (defualt: None)')
     args = argparser.parse_args()
     
     vehicles_list = []
     nonvehicles_list = []
     client = carla.Client(args.host, args.port)
     client.set_timeout(10.0)
+
+    assert (args.data_root is not None), 'you need to specify data root path!'
+    assert (args.scene_num is not None), 'you need to specify driving scene number!'
 
     try:
         # -----------------------------
@@ -300,6 +312,14 @@ def main():
                 snap = data[tick_idx]
                 depth_img = data[depth_idx]
                 seg_img = data[segm_idx]
+                rgb_img = data[cam_idx]
+
+                # rgb image to numpy array
+                H, W = rgb_img.height, rgb_img.width
+
+                np_rgb = np.frombuffer(rgb_img.raw_data, dtype=np.dtype("uint8")) 
+                np_rgb = np.reshape(np_rgb, (H, W, 4)) # RGBA format
+                np_rgb = np_rgb[:, :, :3] #  Take only RGB
 
                 # segmentation to numpy array
                 H_seg, W_seg = seg_img.height, seg_img.width
@@ -307,7 +327,25 @@ def main():
                 seg_img = np.reshape(seg_img, (H_seg, W_seg, 4)) # RGBA format
                 seg_img = seg_img[:, :, :3] #  Take only RGB
 
+
+                # -----------------------------
+                #        Get Segmentation
+                # -----------------------------
+
+                # initialize lane, road segmentation
+                veh_seg = np.zeros((H, W, 3), dtype=np.uint8)
+
+
+                # get vehicle mask
+                vehicle_mask = (seg_img[:,:,2]==10)
+                ped_mask = (seg_img[:,:,2]==4)
+
                 
+                # create vehicle_seg
+                veh_seg[vehicle_mask, :] = (200, 200, 200)
+                veh_seg[ped_mask, :] = (50, 50, 50)
+
+
                 # -----------------------------
                 #        Get bounding box
                 # -----------------------------
@@ -374,17 +412,28 @@ def main():
                 # -----------------------------
                 #       Save bbox, instance
                 # -----------------------------
+                img_path = args.data_root + args.scene_num + '/image_00/'
+                obj_path = args.data_root + args.scene_num + '/object_detection/'
+                seg_path = args.data_root + args.scene_num + '/segmentation/dynamic/'
 
-                path = '/home/rml/ws/BEVDataset/generateTarget/annotations/ObjectDetection/drive_001/'
-                image_id = '{0:010d}'.format(cnt)
+                if not os.path.isdir(img_path):
+                    os.makedirs(img_path)
+                if not os.path.isdir(obj_path):
+                    os.makedirs(obj_path)
+                if not os.path.isdir(seg_path):
+                    os.makedirs(seg_path)
 
-                cva.save_output(objs, 
-                                path=path, 
-                                image_id=image_id, 
+                filename = '{0:010d}'.format(cnt)
+
+                cva.save_obj_output(objs, 
+                                path=obj_path, 
+                                image_id=filename, 
                                 out_format='json')
 
-
+                cv2.imwrite(seg_path + f'{filename}.png', veh_seg)
+                cv2.imwrite(img_path + f'{filename}.png', np_rgb)
                 
+                print('saved!')
                 time_sim = 0
                 cnt = cnt + 1
 

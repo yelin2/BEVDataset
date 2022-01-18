@@ -453,7 +453,7 @@ def draw_output(carla_img,
     return(np.array(image))
 
 
-def save_output(objs,
+def save_obj_output(objs,
                 path = None,
                 image_id = None, 
                 out_format='pickle'):
@@ -473,7 +473,6 @@ def save_output(objs,
         b_dict['image_id'] = image_id
         out_list.append(b_dict)
 
-    # out_dict = {'target': out_list}
 
     if out_format=='json':
         filename = path + image_id + '.txt'
