@@ -346,13 +346,13 @@ def main():
                 objs['bbox'] = walker_filtered['bbox'] \
                                 + vehicle_filtered['bbox']\
 
-                                # + vehicle_removed['bbox']\
+                                # + vehicle_removed['bbox']\    #! uncomment if you want include removed vehicles & walkers
                                 # + walker_removed['bbox']
 
                 objs['class'] = walker_filtered['class']\
                                 + vehicle_filtered['class']\
 
-                                # + vehicle_removed['class']\
+                                # + vehicle_removed['class']\   #! uncomment if you want include removed vehicles & walkers
                                 # + walker_removed['class']
 
 
