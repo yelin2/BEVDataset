@@ -232,10 +232,13 @@ def main():
                 # get lane, road, vehicle mask
                 lane_mask = (np_seg[:,:,2] == 6)
                 road_mask = (np_seg[:,:,2] == 7)
+                traffic_light_mask = np.logical_or((np_seg[:,:,2]==18), (np_seg[:,:,2]==5))
+                traffic_light_mask = np.logical_or(traffic_light_mask, (np_seg[:,:,2]==12))
 
                 # create lane_seg, road_seg
                 lane_road_seg[lane_mask, :] = (255, 255, 255)
                 lane_road_seg[road_mask, :] = (114, 114, 114)
+                lane_road_seg[traffic_light_mask, :] = (100, 100, 100)
 
 
                 # -----------------------------

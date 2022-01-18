@@ -238,7 +238,7 @@ def main():
         print('Ego-vehicle ready')
 
         # Spawn RGB camera
-        t_sem_location = carla.Location(0,0,50)     #! BEV transform
+        t_sem_location = carla.Location(0,0,30)     #! BEV transform
         t_sem_rotation = carla.Rotation(-90, 0, 0)
         cam_transform = carla.Transform(t_sem_location, t_sem_rotation)
         cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
