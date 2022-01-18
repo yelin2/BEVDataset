@@ -423,7 +423,6 @@ def main():
             time_sim = time_sim + settings.fixed_delta_seconds
 
     finally:
-        # cva.save2darknet(None,None,None,save_train=True)
         try:
             cam.stop()
             depth.stop()
