@@ -316,10 +316,12 @@ def main():
 
                 # get vehicle mask
                 vehicle_mask = (np_seg[:,:,2]==10)
+                ped_mask = (np_seg[:,:,2]==4)
 
                 
                 # create vehicle_seg
                 veh_seg[vehicle_mask, :] = (200, 200, 200)
+                veh_seg[ped_mask, :] = (50, 50, 50)
 
 
                 # -----------------------------
