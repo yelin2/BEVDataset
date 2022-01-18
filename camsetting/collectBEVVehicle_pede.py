@@ -186,6 +186,7 @@ def main():
             synchronous_master = False
 
         blueprints = world.get_blueprint_library().filter('vehicle.*')
+        ego_blueprints = world.get_blueprint_library().filter('vehicle.citroen.c3')
 
         spawn_points = world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
@@ -297,7 +298,7 @@ def main():
         idx = idx+1
 
         # Spawn ego vehicle
-        ego_bp = random.choice(blueprints)
+        ego_bp = random.choice(ego_blueprints)
         ego_transform = random.choice(spawn_points)
         ego_vehicle = world.spawn_actor(ego_bp, ego_transform)
         vehicles_list.append(ego_vehicle)
@@ -368,8 +369,8 @@ def main():
         #-------front-------#
         car_cam_fov = '70'
         # Spawn target RGB camera
-        f_sem_location = carla.Location(1.70079118954, 0.0159456324149, 1.51095763913)     #! BEV transform
-        f_sem_rotation = carla.Rotation(0.04612719483860205, -90.32322642770004 + 90, -90.32571568590001+ 90)
+        f_sem_location = carla.Location(1, 0.0159456324149, 1.65)     #! BEV transform
+        f_sem_rotation = carla.Rotation(0.04612719483860205, -(-90.32322642770004 + 90), -90.32571568590001+ 90)
         f_cam_transform = carla.Transform(f_sem_location, f_sem_rotation)
         f_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
         f_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
@@ -416,8 +417,8 @@ def main():
 
         #-------front_right-------#
         # Spawn target RGB camera
-        fr_sem_location = carla.Location(1.5508477543, -0.493404796419, 1.49574800619)     #! BEV transform
-        fr_sem_rotation = carla.Rotation(0.5188438566960005, -146.40439790300002 + 90, -90.78202358850001 + 90)
+        fr_sem_location = carla.Location(1, 0.493404796419, 1.65)     #! BEV transform
+        fr_sem_rotation = carla.Rotation(0.5188438566960005, -(-146.40439790300002 + 90), -90.78202358850001 + 90)
         fr_cam_transform = carla.Transform(fr_sem_location, fr_sem_rotation)
         fr_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
         fr_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
@@ -464,8 +465,8 @@ def main():
 
         #-------front_left-------#
         # Spawn target RGB camera
-        fl_sem_location = carla.Location(1.52387798135, 0.494631336551, 1.50932822144)     #! BEV transform
-        fl_sem_rotation = carla.Rotation(0.12143609391200118, -34.8390355956 + 90, -89.85977500319999 + 90)
+        fl_sem_location = carla.Location(1, -0.494631336551, 1.65)     #! BEV transform
+        fl_sem_rotation = carla.Rotation(0.12143609391200118, -(-34.8390355956 + 90), -89.85977500319999 + 90)
         #pitch roll yaw
         fl_cam_transform = carla.Transform(fl_sem_location, fl_sem_rotation)
         fl_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
@@ -512,8 +513,8 @@ def main():
         #--------------------------#
 
         #-------back_right-------#
-        br_sem_location = carla.Location(1.0148780988, -0.480568219723, 1.56239545128)     #! BEV transform
-        br_sem_rotation = carla.Rotation( 0.6190947610589997, 159.200715506 + 90, -90.93206677999999 + 90)#pitch yaw roll
+        br_sem_location = carla.Location(0, 0.480568219723, 1.65)     #! BEV transform
+        br_sem_rotation = carla.Rotation( 0.6190947610589997, -(159.200715506 + 90), -90.93206677999999 + 90)#pitch yaw roll
         br_cam_transform = carla.Transform(br_sem_location, br_sem_rotation)
         br_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
         br_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
@@ -532,8 +533,8 @@ def main():
         #--------------------------#
 
         #-------back_left-------#
-        bl_sem_location = carla.Location(1.03569100218, 0.484795032713, 1.59097014818)     #! BEV transform
-        bl_sem_rotation = carla.Rotation(-0.21518275753700122, 18.600246142799996 + 90, -90.91736319750001 + 90)#pitch roll yaw
+        bl_sem_location = carla.Location(0, 0.484795032713, 1.65)     #! BEV transform
+        bl_sem_rotation = carla.Rotation(-0.21518275753700122, -(18.600246142799996 + 90), -90.91736319750001 + 90)#pitch roll yaw
         bl_cam_transform = carla.Transform(bl_sem_location, bl_sem_rotation)
         bl_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
         bl_cam_bp.set_attribute('sensor_tick', str(tick_sensor))
@@ -552,8 +553,8 @@ def main():
 
         #-------back-------#
 
-        b_sem_location = carla.Location(0.0283260309358, 0.00345136761476, 1.57910346144)     #! BEV transform
-        b_sem_rotation = carla.Rotation(0.22919685786400154, 89.86124500000001 + 90, -89.0405962694 + 90)#pitch roll yaw
+        b_sem_location = carla.Location(-1.5, 0.00345136761476, 1.65)     #! BEV transform
+        b_sem_rotation = carla.Rotation(0.22919685786400154, -(89.86124500000001 + 90), -89.0405962694 + 90)#pitch yaw roll
         b_cam_transform = carla.Transform(b_sem_location, b_sem_rotation)
         b_cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
         b_cam_bp.set_attribute('sensor_tick', str(tick_sensor))

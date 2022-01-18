@@ -23,4 +23,4 @@ def euler_from_quaternion(w, x, y, z):
      
         return np.degrees(pitch_y), np.degrees(yaw_z), np.degrees(roll_x) # in radians
 
-print(euler_from_quaternion(0.6924185592174665,-0.7031619420114925,-0.11648342771943819,0.11203317912370753))
+print(euler_from_quaternion(0.9999984769132877, 0.0, 0.0, 0.0017453283658983088))
