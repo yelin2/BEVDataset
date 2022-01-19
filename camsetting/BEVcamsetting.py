@@ -280,6 +280,10 @@ def run_simulation(args, client):
 
         traffic_manager = client.get_trafficmanager(args.tm_port)
         traffic_manager.set_global_distance_to_leading_vehicle(2.0)
+        if args.seed is not None:
+            traffic_manager.set_random_device_seed(args.seed)
+            random.seed(args.seed)
+
         world = client.get_world()
  
         print('\nRUNNING in synchronous mode\n')
@@ -320,12 +324,16 @@ def run_simulation(args, client):
         for n, transform in enumerate(spawn_points):
             if n >= args.number_of_vehicles:
                 break
-            blueprint = random.choice(blueprints)
+            bp_num = random.randint(0, len(blueprints)-1)
+            blueprint = blueprints[bp_num]
             if blueprint.has_attribute('color'):
-                color = random.choice(blueprint.get_attribute('color').recommended_values)
+                color_num = random.randint(0, len(blueprint.get_attribute('color').recommended_values)-1)
+
+                color = blueprint.get_attribute('color').recommended_values[color_num]
                 blueprint.set_attribute('color', color)
             if blueprint.has_attribute('driver_id'):
-                driver_id = random.choice(blueprint.get_attribute('driver_id').recommended_values)
+                driver_id_num = random.randint(0, len(blueprint.get_attribute('driver_id').recommended_values)-1)
+                driver_id = blueprint.get_attribute('driver_id').recommended_values[driver_id_num]
                 blueprint.set_attribute('driver_id', driver_id)
             blueprint.set_attribute('role_name', 'autopilot')
             batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
@@ -351,12 +359,11 @@ def run_simulation(args, client):
         # some settings
         percentagePedestriansRunning = 0.0      # how many pedestrians will run
         percentagePedestriansCrossing = 0.0     # how many pedestrians will walk through the road
-        if 0:
-            world.set_pedestrians_seed(0)
-            random.seed(0)
+        if args.seed:
+            world.set_pedestrians_seed(args.seed)
         # 1. take all the random locations to spawn
         spawn_points_w = []
-        for i in range(100):
+        for i in range(args.number_of_walkers):
             spawn_point = carla.Transform()
             loc = world.get_random_location_from_navigation()
             if (loc != None):
@@ -366,7 +373,8 @@ def run_simulation(args, client):
         batch = []
         walker_speed = []
         for spawn_point in spawn_points_w:
-            walker_bp = random.choice(blueprintsWalkers)
+            walker_bp_num = random.randint(0, len(blueprintsWalkers)-1)
+            walker_bp = blueprintsWalkers[walker_bp_num]
             # set as not invincible
             if walker_bp.has_attribute('is_invincible'):
                 walker_bp.set_attribute('is_invincible', 'false')
@@ -406,8 +414,10 @@ def run_simulation(args, client):
         idx = idx+1
 
         # Spawn ego vehicle
-        ego_bp = random.choice(ego_blueprints)
-        ego_transform = random.choice(spawn_points)
+        ego_blueprints_num = random.randint(0, len(ego_blueprints)-1)
+        ego_random_num = random.randint(0, len(spawn_points)-1)
+        ego_bp = ego_blueprints[ego_blueprints_num]
+        ego_transform = spawn_points[ego_random_num]
         ego_vehicle = world.spawn_actor(ego_bp, ego_transform)
         vehicles_list.append(ego_vehicle)
         ego_vehicle.set_autopilot(True)
@@ -644,17 +654,28 @@ def main():
         type=int,
         help='TCP port to listen to (default: 2000)')
     argparser.add_argument(
-        '-n', '--number-of-vehicles',
+        '-nov', '--number-of-vehicles',
         metavar='N',
         default=50,
         type=int,
         help='number of vehicles (default: 10)')
+    argparser.add_argument(
+        '-now','--number-of-walkers',
+        metavar='W',
+        default=10,
+        type=int,
+        help='Number of walkers (default: 10)')
     argparser.add_argument(
         '-tm_p', '--tm_port',
         metavar='P',
         default=8000,
         type=int,
         help='port to communicate with TM (default: 8000)')
+    argparser.add_argument(
+        '-s', '--seed',
+        metavar='S',
+        type=int,
+        help='Set random device seed and deterministic mode for Traffic Manager')
     #---------------cam setting----------------------------
     argparser.add_argument(
         '--w',
@@ -719,19 +740,6 @@ def main():
     finally:
         print('\ndone.')
 
-def visualize():
-    while True:
-        global log_mutex
-        global v_concat
-        global car_camera
-
-
-        log_mutex.acquire()
-        # print('vis', v_concat.shape)
-        cv2.imshow('detection & segmentation', v_concat)
-        cv2.imshow('car camera', car_camera)
-        log_mutex.release()
-        cv2.waitKey(10)
 
 if __name__ == '__main__':
     
