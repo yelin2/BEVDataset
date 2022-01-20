@@ -1,209 +1,92 @@
 import numpy as np
+import glob
 
-a = np.array(
-   [
-        [
-            [
-                779.0887896371125,
-                -956.2382006673516
-            ],
-            [
-                792.8869446073271,
-                -885.7154465871411
-            ]
-        ],
-        [
-            [
-                1108.2088252351625,
-                -87.96189129749158
-            ],
-            [
-                1134.7836845311547,
-                -50.189180301692495
-            ]
-        ],
-        [
-            [
-                370.46306521359304,
-                887.6612767864339
-            ],
-            [
-                390.9039446928708,
-                905.5144109013808
-            ]
-        ],
-        [
-            [
-                499.4477103206042,
-                1091.253915586084
-            ],
-            [
-                515.0074181442511,
-                1117.052378122035
-            ]
-        ],
-        [
-            [
-                851.573094187202,
-                566.317453845113
-            ],
-            [
-                868.1893984167947,
-                579.5471411456758
-            ]
-        ],
-        [
-            [
-                1005.8851276509101,
-                984.5938821674324
-            ],
-            [
-                1028.4929106840577,
-                1006.1500046258365
-            ]
-        ],
-        [
-            [
-                481.1273986621151,
-                321.4888212440128
-            ],
-            [
-                497.3802751375104,
-                343.9781326275568
-            ]
-        ],
-        [
-            [
-                999.1139726853327,
-                248.21704651103622
-            ],
-            [
-                1021.4595969529357,
-                273.3855133682717
-            ]
-        ],
-        [
-            [
-                818.1798404848465,
-                -881.2794846226261
-            ],
-            [
-                833.4985426070971,
-                -813.5942242611402
-            ]
-        ],
-        [
-            [
-                1012.4858145253774,
-                80.24303036478595
-            ],
-            [
-                1035.3502340807433,
-                111.71981904182465
-            ]
-        ],
-        [
-            [
-                447.5345959513144,
-                372.9579470398091
-            ],
-            [
-                465.05823734355624,
-                393.5114086253943
-            ]
-        ],
-        [
-            [
-                790.8664110277506,
-                -781.6729937136311
-            ],
-            [
-                805.1227075181084,
-                -717.7234358439632
-            ]
-        ],
-        [
-            [
-                1103.584635636364,
-                -87.16159394573178
-            ],
-            [
-                1125.8455432810433,
-                -58.06131032818568
-            ]
-        ],
-        [
-            [
-                657.2801341188632,
-                1333.6845121295423
-            ],
-            [
-                669.753168759738,
-                1361.1173311587893
-            ]
-        ]
-    ]
-)
-x_min = 100
-y_min = 100
-x_max = 0
-y_max = 0
-min_sum = 100
-max_sum = 0
+files = glob.glob('./vehicle_bbox/*.txt')
+# files = glob.glob('./walker_bbox/*.txt')
 
-x_min_x = 100
-x_min_y = 100
+image_num = len(files)
 
-x_max_x = 0
-y_max_y = 0
+object_num_b = 0
 
-y_min_x = 100
-y_min_y = 100
+x_min_b = 1000
+y_min_b = 1000
 
-y_max_x = 0
-y_max_y = 0
+x_max_b = 0
+y_max_b = 0
+
+sum_x_b = 0
+sum_y_b = 0
+
+object_num_r = 0
+
+x_min_r = 1000
+y_min_r = 1000
+
+x_max_r = 0
+y_max_r = 0
+
+sum_x_r = 0
+sum_y_r = 0
+
+for i in range(len(files)):
+    f = open(files[i], 'r', encoding='utf-8')
+    data = f.read()
+    f.close()
+    data = eval(data)
+
+    object_num_b += len(data['bboxes'])
+    for i in range(len(data['bboxes'])):
+        x = abs(abs(data['bboxes'][i][1][0]) - abs(data['bboxes'][i][0][0]))
+        y = abs(abs(data['bboxes'][i][1][1]) - abs(data['bboxes'][i][0][1]))
+        
+        sum_x_b += x
+        sum_y_b += y
+
+        if x < x_min_b:
+            x_min_b = x
+
+        if y < y_min_b:
+            y_min_b = y
+
+        if x > x_max_b:
+            x_max_b = x
+
+        if y > y_max_b:
+            y_max_b = y
+    
+
+    object_num_r += len(data['removed_bboxes'])
+    for i in range(len(data['removed_bboxes'])):
+        x = abs(abs(data['removed_bboxes'][i][1][0]) - abs(data['removed_bboxes'][i][0][0]))
+        y = abs(abs(data['removed_bboxes'][i][1][1]) - abs(data['removed_bboxes'][i][0][1]))
+        
+        sum_x_r += x
+        sum_y_r += y
+
+        if x < x_min_r:
+            x_min_r = x
+
+        if y < y_min_r:
+            y_min_r = y
+
+        if x > x_max_r:
+            x_max_r = x
+
+        if y > y_max_r:
+            y_max_r = y
+
+print("number of images:",image_num)
+print("-------------min max-------------")
 
 
+print("bboxes min x, min y:", x_min_b,",", y_min_b)
+print("bboxes max x, max y:", x_max_b, ",", y_max_b)
 
-for i in range(len(a)):
-    print(a[i][1][1], a[i][0][1])
-    x = abs(abs(a[i][1][0]) - abs(a[i][0][0]))
-    y = abs(abs(a[i][1][1]) - abs(a[i][0][1]))
-    if x < x_min_x:
-        x_min_x = x
-        x_min_y = y
-    if y < y_min_y:
-        y_min_y = y
-        y_min_x = x
+print("removed min x, min y:", x_min_r,",",  y_min_r)
+print("removed max x, max y:", x_max_r,",",  y_max_r)
 
-    if x > x_max_x:
-        x_max_x = x
-        x_min_y = y
+print("\n-------------only bboxes-------------")
+print("average",object_num_b, "objects x,y:",sum_x_b/object_num_b,",", sum_y_b/object_num_b)
 
-    if y > y_max_y:
-        y_max_y = y
-        y_max_x = x
-    if x + y < min_sum:
-
-        x_min = x
-        y_min = y
-        min_sum = x + y
-    if x + y > max_sum:
-
-        x_max = x
-        y_max = y
-        max_sum = x+y
-
-
-print("min x pixels of obj| ", "x: ",int(x_min_x), "y: ",int(x_min_y))
-print("min y pixels of obj| ", "x: ",int(y_min_x), "y: ",int(y_min_y))
-print("max x pixels of obj| ", "x: ",int(x_max_x), "y: ",int(x_min_y))
-print("max y pixels of obj| ", "x: ",int(y_max_x), "y: ",int(y_max_y))
-
-print("min pixels of obj| ", "x: ",int(x_min), "y: ",int(y_min), \
-        "min_sum: ",int(min_sum))
-print("max pixels of obj| ", "x: ", int(x_max), "y: ",int(y_max)\
-    ,"max_sum: ",int(max_sum))
-
-print("min_x: ", int(x_min_x), "min_y", int(y_min_y), \
-    "max_x: ", int(x_max_x), "max_y", int(y_max_y))
+print("\n-------------including removed-------------")
+print("average",object_num_r + object_num_b, "objects x,y:",(sum_x_b+ sum_x_r)/(object_num_r+object_num_b) ,",", (sum_y_b+ sum_y_r)/(object_num_r+ object_num_b),"\n" )
