@@ -221,6 +221,7 @@ class SensorManager:
         array = np.reshape(array, (image.height, image.width, 4))
         array = array[:, :, :3]
         array = array[:, :, ::-1]
+        array = cv2.resize(array, (350, 350)) 
 
         if self.display_man.render_enabled():
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
@@ -239,9 +240,11 @@ class SensorManager:
         array = np.reshape(array, (image.height, image.width, 4))
         array = array[:, :, :3]
         array = array[:, :, ::-1]
+        array = cv2.resize(array, (350, 350)) 
 
-        if self.display_man.render_enabled():
-            self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+
+        # if self.display_man.render_enabled():
+        #     self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
         t_end = self.timer.time()
         self.time_processing += (t_end-t_start)
@@ -257,6 +260,8 @@ class SensorManager:
         array = np.reshape(array, (image.height, image.width, 4))
         array = array[:, :, :3]
         array = array[:, :, ::-1]
+        array = cv2.resize(array, (350, 350)) 
+
 
         if self.display_man.render_enabled():
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
@@ -429,7 +434,7 @@ def run_simulation(args, client):
 
         # Display Manager organize all the sensors an its display in a window
         # If can easily configure the grid and the total window size
-        display_manager = DisplayManager(grid_size=[3, 3], window_size=[args.width, args.height])
+        display_manager = DisplayManager(grid_size=[3, 3], window_size=[1050, 1050])
 
         # Then, SensorManager can be used to spawn RGBCamera, LiDARs and SemanticLiDARs as needed
         # and assign each of them to a grid position, 
@@ -465,13 +470,13 @@ def run_simulation(args, client):
             'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 2])#front right
         
         
-        t_depth = SensorManager(world, display_manager, 'SEMANTICCamera', t_transform, ego_vehicle, \
+        t_sem = SensorManager(world, display_manager, 'SEMANTICCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
                 'image_size_y': str(args.h), 'fov': str(args.fov)}, display_pos=[1, 0]) # target depth
         t_rgb = SensorManager(world, display_manager, 'RGBCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
                 'image_size_y': str(args.h), 'fov': str(args.fov)}, display_pos=[1, 1]) # target rgb
-        t_sem = SensorManager(world, display_manager, 'DEPTHCamera', t_transform, ego_vehicle, \
+        t_depth = SensorManager(world, display_manager, 'DEPTHCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
                 'image_size_y': str(args.h), 'fov': str(args.fov)}, display_pos=[1, 2]) # target segmentation
         
@@ -536,7 +541,7 @@ def run_simulation(args, client):
 
             if call_exit:
                 break
-
+            
             # Check whether it's time to capture data
             if time_sim >= tick_sensor:
                 data = [retrieve_data(q,nowFrame) for q in q_list]
@@ -564,7 +569,6 @@ def run_simulation(args, client):
 
                 # Save depth image, RGB image, and Bounding Boxes data
                 if save_depth:
-                    
                     depth_img.save_to_disk('out_depth/%06d.png' % depth_img.frame, cc_depth_log)
                 depth_meter = cva.extract_depth(depth_img)
                 walker_filtered, walker_removed =  cva.auto_annotate(walkers, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
@@ -574,6 +578,13 @@ def run_simulation(args, client):
                 vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
                 vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], \
                     vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True, for_vehicle_img = rgb_img)
+                if t_depth.display_man.render_enabled():
+
+                    vehicle_box_rgb = cv2.resize(vehicle_box_rgb, (350, 350)) 
+                    
+                    t_depth.surface = pygame.surfarray.make_surface(vehicle_box_rgb.swapaxes(0, 1))
+                
+
                 
                 #-------------------Segmentation-------------------
 
@@ -634,7 +645,7 @@ def run_simulation(args, client):
         print('destroying %d nonvehicles' % len(nonvehicles_list))
         client.apply_batch([carla.command.DestroyActor(x) for x in nonvehicles_list])
 
-        time.sleep(0.5)
+        time.sleep(0.01)
 
 
 
