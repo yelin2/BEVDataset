@@ -60,6 +60,8 @@ import datetime
 import logging
 import math
 import weakref
+import random
+import json
 
 try:
     import pygame
@@ -133,10 +135,25 @@ class World(object):
         self.imu_sensor = None
         self.radar_sensor = None
         self.camera_manager = None
+        self.spawn_ego_vehicle()
         self.restart()
         self.world.on_tick(hud.on_world_tick)
         self.recording_enabled = False
         self.recording_start = 0
+
+    def spawn_ego_vehicle(self):
+
+        # choose spawn point (random)
+        spawn_points = self.world.get_map().get_spawn_points()
+        ego_transform = random.choice(spawn_points)
+
+        # create hero blueprint
+        ego_bp = self.world.get_blueprint_library().filter('vehicle.citroen.c3')[0]
+        ego_bp.set_attribute('role_name', 'hero')
+
+        # spawn ego vehicle actor in world
+        ego_vehicle = self.world.spawn_actor(ego_bp, ego_transform)
+        
 
     def restart(self):
 
@@ -887,10 +904,37 @@ class CameraManager(object):
 
 
 # ==============================================================================
+# -- save_trajectory() ---------------------------------------------------------------
+# ==============================================================================
+
+def save_trajectory(traj, timestamp, args, running_time):
+    
+    assert len(traj) == len(timestamp)
+    traj_dict = {}
+
+    
+    traj_dict['running_time'] = running_time
+
+    for i, (point, time) in enumerate(zip(traj, timestamp)):
+        traj_dict[i] = {'time': time,
+                        'x':point.location.x,
+                        'y':point.location.y,
+                        'z':point.location.z,
+                        'roll':point.rotation.roll,
+                        'pitch':point.rotation.pitch,
+                        'yaw':point.rotation.yaw}
+    
+    print(f'total running time is {running_time}: saved {len(traj)} waypoints')
+    with open(args.traj_save_path + 'trajectory.json', 'w') as js:
+        json.dump(traj_dict, js, indent=4)
+
+
+# ==============================================================================
 # -- game_loop() ---------------------------------------------------------------
 # ==============================================================================
 
 def game_loop(args):
+    import time
     pygame.init()
     pygame.font.init()
     world = None
@@ -913,17 +957,32 @@ def game_loop(args):
         sim_world.wait_for_tick()
 
         clock = pygame.time.Clock()
+        s = time.time()
+
+        traj = []
+        timestamp = []
+        cnt = 0
         while True:
-            clock.tick_busy_loop(60)
+            clock.tick_busy_loop(60)        #! roop rate 60Hz
             if controller.parse_events(client, world, clock):
                 return
             if not world.tick(clock):
                 return
+            if cnt == 30:
+                traj.append(world.player.get_transform())
+                timestamp.append(time.time())
+                cnt = 0
+            cnt = cnt + 1
+
             world.render(display)
             pygame.display.flip()
-
+        
+            e = time.time()
+    
     finally:
 
+        if args.save_traj:
+            save_trajectory(traj, timestamp, args, e-s)
         if (world and world.recording_enabled):
             client.stop_recorder()
 
@@ -978,6 +1037,15 @@ def main():
         '--keep_ego_vehicle',
         action='store_true',
         help='do not destroy ego vehicle on exit')
+    argparser.add_argument(
+        '--save_traj',
+        default=True,
+        help='save trajectory (default: True)')
+    argparser.add_argument(
+        '--traj_save_path',
+        default='',
+        help='save trajectory path (default: '')')
+
     args = argparser.parse_args()
 
     args.width, args.height = [int(x) for x in args.res.split('x')]
