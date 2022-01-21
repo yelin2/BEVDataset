@@ -1,8 +1,8 @@
 import numpy as np
 import glob
 
-files = glob.glob('./vehicle_bbox/*.txt')
-# files = glob.glob('./walker_bbox/*.txt')
+# files = glob.glob('./vehicle_bbox/*.txt')
+files = glob.glob('./walker_bbox/*.txt')
 
 image_num = len(files)
 
