@@ -12,6 +12,7 @@ import glob
 import os
 import sys
 import time
+import math
 
 try:
     sys.path.append(glob.glob('/opt/carla-simulator/PythonAPI/carla/dist/carla-*%d.7-%s.egg' % (
@@ -43,6 +44,15 @@ try:
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
+save_rgb = True
+save_depth = False
+save_segm = False
+save_lidar = False
+tick_sensor = 1
+
+log_mutex = Lock()
+v_concat = np.zeros((1200, 800, 3))
+
 
 def retrieve_data(sensor_queue, frame, timeout=5):
     while True:
@@ -53,18 +63,9 @@ def retrieve_data(sensor_queue, frame, timeout=5):
         if data.frame == frame:
             return data
 
-save_rgb = True
-save_depth = False
-save_segm = False
-save_lidar = False
-tick_sensor = 1
-
-log_mutex = Lock()
-v_concat = np.zeros((1200, 800, 3))
-
-def metersetting(w, h, x_meter, y_meter, fov):
+def metersetting(w, h, x_meter,  fov):
     '''
-        w, h, x_meter, y_meter, fov -> cam height & meter per pixel
+        w, h, x_meter, fov -> cam height & meter per pixel calculate
     '''
     fx = w /(2 * np.tan(fov * np.pi / 360))
     fy = h /(2 * np.tan(fov * np.pi / 360))
@@ -72,18 +73,17 @@ def metersetting(w, h, x_meter, y_meter, fov):
     cy = h/2
 
     x_rad = np.radians(fov/2)
-    
+    x_meter = x_meter/2
     cam_height = x_meter/np.tan(x_rad)
 
     x_mpp = x_meter/w
-    y_mpp = y_meter/h
-    if w != h:
-        y_meter = (x_meter/w) * h
-        return cam_height/2, x_mpp, y_meter
-
-    return cam_height/2, x_mpp, y_mpp
+    y_meter = x_mpp * h
+    return cam_height, x_mpp, y_meter
 
 def carlaimg_to_np(carla_img):
+    """
+    carla img object -> numpy array
+    """
     carla_img.convert(carla.ColorConverter.Raw)
     img_bgra = np.array(carla_img.raw_data).reshape((carla_img.height,carla_img.width,4))
     img_rgb = np.zeros((carla_img.height,carla_img.width,3))
@@ -93,6 +93,73 @@ def carlaimg_to_np(carla_img):
     img_rgb = np.uint8(img_rgb)
     image = Image.fromarray(img_rgb, 'RGB')
     return(np.array(image))
+
+def draw_waypoints(world, waypoints = None, z=0.5):
+    """
+    Draw a list of waypoints at a certain height given in z.
+
+        :param world: carla.world object
+        :param waypoints: list or iterable container with the waypoints to draw
+        :param z: height in meters
+    """
+    if waypoints is None:
+        location = carla.Location(0,0,0)
+        rotation = carla.Rotation(0,0,0)
+        begin = location + carla.Location(z=1)
+        angle = math.radians(rotation.yaw)
+        end = begin + carla.Location(x=math.cos(angle), y=math.sin(angle))
+        world.debug.draw_arrow(begin, end,thickness=0.2, arrow_size=0.2, life_time=0)
+
+        location = carla.Location(0,10,0)
+        rotation = carla.Rotation(0,90,0)
+        begin = location + carla.Location(z=1)
+        angle = math.radians(rotation.yaw)
+        end = begin + carla.Location(x=math.cos(angle), y=math.sin(angle))
+        world.debug.draw_arrow(begin, end, thickness=0.2,arrow_size=0.2,color=carla.Color(0,0,255), life_time=0)
+
+        location = carla.Location(10,0,0)
+        rotation = carla.Rotation(0,-90,0)
+        begin = location + carla.Location(z=1)
+        angle = math.radians(rotation.yaw)
+        end = begin + carla.Location(x=math.cos(angle), y=math.sin(angle))
+        world.debug.draw_arrow(begin, end, thickness=0.2,arrow_size=0.2,color=carla.Color(0,255,0), life_time=0)
+
+    else: 
+        for wpt in waypoints:
+            begin = wpt.location + carla.Location(z=z)
+            angle = math.radians(wpt.rotation.yaw)
+            end = begin + carla.Location(x=math.cos(angle), y=math.sin(angle))
+            world.debug.draw_arrow(begin, end, arrow_size=0.3, life_time=0)
+        
+    
+
+
+
+
+
+def draw_spawnpoints(world, spawnpoints, color = [255,255,0], point_size = 0.1, time = 10, is_list = 1):
+    """
+    Draw a list of spawnpoints at a certain height given in z.
+
+        :param world: carla.world object
+        :param spawnpoints: list or iterable container with the spawnpoints to draw
+        :param z: height in meters
+    """
+    if is_list:
+        for i, spt in enumerate(spawnpoints):
+            # spt_t = spawnpoints[i].transform
+            location = spawnpoints[i].location
+            print(location)
+
+            world.debug.draw_point(location, size=point_size, color=carla.Color(color[0], color[1], color[2]), life_time=time)
+  
+    else:
+        # spawnpoints[ego].location = carla.Location(-30, -30, spawnpoints[ego].location.z)
+        location = spawnpoints.location
+        print(location)
+
+        world.debug.draw_point(location, size=point_size, color=carla.Color(color[0], color[1], color[2]), life_time=time)
+        
 
 class CustomTimer:
     def __init__(self):
@@ -307,6 +374,10 @@ def run_simulation(args, client):
 
         spawn_points = world.get_map().get_spawn_points()
         number_of_spawn_points = len(spawn_points)
+        print("vehicle_number_of_spawn_points:", number_of_spawn_points)
+
+
+        
 
         if args.number_of_vehicles < number_of_spawn_points:
             random.shuffle(spawn_points)
@@ -340,6 +411,9 @@ def run_simulation(args, client):
                 driver_id_num = random.randint(0, len(blueprint.get_attribute('driver_id').recommended_values)-1)
                 driver_id = blueprint.get_attribute('driver_id').recommended_values[driver_id_num]
                 blueprint.set_attribute('driver_id', driver_id)
+            
+            if args.debug:
+                draw_spawnpoints(world, transform, is_list = 0)
             blueprint.set_attribute('role_name', 'autopilot')
             batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
             spawn_points.pop(0)
@@ -359,6 +433,7 @@ def run_simulation(args, client):
         blueprintsWalkers = world.get_blueprint_library().filter('walker.*')
 
         walkers_list = []
+        all_id = []
 
 
         # some settings
@@ -374,9 +449,14 @@ def run_simulation(args, client):
             if (loc != None):
                 spawn_point.location = loc
                 spawn_points_w.append(spawn_point)
+        print("walker_number_of_spawn_points:", len(spawn_points_w))
+        
+
+
         # 2. we spawn the walker object
         batch = []
         walker_speed = []
+        
         for spawn_point in spawn_points_w:
             walker_bp_num = random.randint(0, len(blueprintsWalkers)-1)
             walker_bp = blueprintsWalkers[walker_bp_num]
@@ -395,6 +475,10 @@ def run_simulation(args, client):
                 print("Walker has no speed")
                 walker_speed.append(0.0)
             batch.append(SpawnActor(walker_bp, spawn_point))
+
+            if args.debug:
+                draw_spawnpoints(world, spawn_point, color = [0,0,255],is_list = 0)
+            
         results = client.apply_batch_sync(batch, True)
         walker_speed2 = []
         for i in range(len(results)):
@@ -404,6 +488,45 @@ def run_simulation(args, client):
                 walkers_list.append({"id": results[i].actor_id})
                 walker_speed2.append(walker_speed[i])
         walker_speed = walker_speed2
+
+        # 3. we spawn the walker controller
+        batch = []
+        walker_controller_bp = world.get_blueprint_library().find('controller.ai.walker')
+        for i in range(len(walkers_list)):
+            batch.append(SpawnActor(walker_controller_bp, carla.Transform(), walkers_list[i]["id"]))
+        results = client.apply_batch_sync(batch, True)
+        for i in range(len(results)):
+            if results[i].error:
+                logging.error(results[i].error)
+            else:
+                walkers_list[i]["con"] = results[i].actor_id
+        # 4. we put together the walkers and controllers id to get the objects from their id
+        for i in range(len(walkers_list)):
+            all_id.append(walkers_list[i]["con"])
+            all_id.append(walkers_list[i]["id"])
+        all_actors = world.get_actors(all_id)
+
+        # wait for a tick to ensure client receives the last transform of the walkers we have just created
+        # if args.asynch or not synchronous_master:
+        #     world.wait_for_tick()
+        # else:
+        world.tick()
+
+        # 5. initialize each controller and set target to walk to (list is [controler, actor, controller, actor ...])
+        # set how many pedestrians can cross the road
+        world.set_pedestrians_cross_factor(percentagePedestriansCrossing)
+        for i in range(0, len(all_id), 2):
+            # start walker
+            all_actors[i].start()
+            # set walk to random point
+            all_actors[i].go_to_location(world.get_random_location_from_navigation())
+            # max speed
+            all_actors[i].set_max_speed(float(walker_speed[int(i/2)]))
+
+        print('spawned %d vehicles and %d walkers, press Ctrl+C to exit.' % (len(vehicles_list), len(walkers_list)))
+
+        # Example of how to use Traffic Manager parameters
+        traffic_manager.global_percentage_speed_difference(30.0)
 
 
         # -----------------------------
@@ -420,9 +543,15 @@ def run_simulation(args, client):
 
         # Spawn ego vehicle
         ego_blueprints_num = random.randint(0, len(ego_blueprints)-1)
-        ego_random_num = random.randint(0, len(spawn_points)-1)
-        ego_bp = ego_blueprints[ego_blueprints_num]
+        # ego_random_num = random.randint(0, len(spawn_points)-1)
+        ego_random_num = 54
         ego_transform = spawn_points[ego_random_num]
+        ego_bp = ego_blueprints[ego_blueprints_num]
+
+        if args.debug:
+            print("\nego vehicle spawn points", ego_transform)
+            draw_waypoints(world)
+            draw_spawnpoints(world, ego_transform, color = [255,0,0], point_size = 0.1, time = 100, is_list = 0)
         ego_vehicle = world.spawn_actor(ego_bp, ego_transform)
         vehicles_list.append(ego_vehicle)
         ego_vehicle.set_autopilot(True)
@@ -454,8 +583,8 @@ def run_simulation(args, client):
                         carla.Rotation( 0.6190947610589997, -(159.200715506 + 90), -90.93206677999999 + 90))
         
         
-        height, x_m_per_pxl, y_m_per_pxl = metersetting(args.w, args.h, args.x_meter, args.y_meter, args.fov)
-        print("meter per pixel: ", x_m_per_pxl, "y_meter: ", y_m_per_pxl)
+        height, x_m_per_pxl, y_meter = metersetting(args.w, args.h, args.x_meter, args.fov)
+        print("height:", height,"meter per pixel:", x_m_per_pxl, "y_meter:", y_meter*2)
         t_transform = carla.Transform(carla.Location(0,0,height), carla.Rotation(-90, 0, 0))
         
         car_cam_fov = '70'
@@ -578,10 +707,11 @@ def run_simulation(args, client):
                 vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
                 vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], \
                     vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True, for_vehicle_img = rgb_img)
-                if t_depth.display_man.render_enabled():
+                
 
+                # pygame display
+                if t_depth.display_man.render_enabled():
                     vehicle_box_rgb = cv2.resize(vehicle_box_rgb, (350, 350)) 
-                    
                     t_depth.surface = pygame.surfarray.make_surface(vehicle_box_rgb.swapaxes(0, 1))
                 
 
@@ -645,6 +775,14 @@ def run_simulation(args, client):
         print('destroying %d nonvehicles' % len(nonvehicles_list))
         client.apply_batch([carla.command.DestroyActor(x) for x in nonvehicles_list])
 
+       # stop walker controllers (list is [controller, actor, controller, actor ...])
+        for i in range(0, len(all_id), 2):
+            all_actors[i].stop()
+
+        print('\ndestroying %d walkers' % len(walkers_list))
+        client.apply_batch([carla.command.DestroyActor(x) for x in all_id])
+        
+
         time.sleep(0.01)
 
 
@@ -691,27 +829,21 @@ def main():
     argparser.add_argument(
         '--w',
         metavar='W',
-        default=480,
+        default=964,
         type=int,
         help='cam setting(w)')
     argparser.add_argument(
         '--h',
         metavar='H',
-        default=480,
+        default=964,
         type=int,
         help='cam setting(h)')
     argparser.add_argument(
         '--x_meter',
         metavar='X',
-        default=50,
+        default=85,
         type=int,
         help='cam setting(x_meter)')
-    argparser.add_argument(
-        '--y_meter',
-        metavar='Y',
-        default=50,
-        type=int,
-        help='cam setting(y_meter)')
     argparser.add_argument(
         '--fov',
         metavar='F',
@@ -735,7 +867,11 @@ def main():
         metavar='WIDTHxHEIGHT',
         default='1280x720',
         help='window resolution (default: 1280x720)')
-    
+    argparser.add_argument(
+        '-d','--debug',
+        metavar='debug',
+        default=False,
+        help='for debuging')
 
     args = argparser.parse_args()
     args.width = int(args.w) * 3
