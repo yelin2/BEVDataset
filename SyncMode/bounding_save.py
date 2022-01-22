@@ -37,30 +37,14 @@ from PIL import ImageDraw
 from threading import Thread, Lock
 
 from utils import *
-from manajors import SensorManager, DisplayManager
+from display_manager import DisplayManager
+from sensor_manager import SensorManager
 try:
     import pygame
     from pygame.locals import K_ESCAPE
     from pygame.locals import K_q
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
-
-
-
-
-
-def should_quit():
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return True
-        elif event.type == pygame.KEYUP:
-            if event.key == pygame.K_ESCAPE:
-                return True
-    return False
-
-        
-    
-
 
 
 save_rgb = True
@@ -72,11 +56,14 @@ tick_sensor = 1
 log_mutex = Lock()
 v_concat = np.zeros((1200, 800, 3))
 
-    
-        
-
-
-
+def should_quit():
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            return True
+        elif event.type == pygame.KEYUP:
+            if event.key == pygame.K_ESCAPE:
+                return True
+    return False
 
 def run_simulation(args, client):
     vehicles_list = []
@@ -107,10 +94,7 @@ def run_simulation(args, client):
         number_of_spawn_points = len(spawn_points)
         print("vehicle_number_of_spawn_points:", number_of_spawn_points)
 
-        spawn_points = suffled(args, spawn_points, number_of_spawn_points)
-
-
-        
+        # spawn_points = suffled(args, spawn_points, number_of_spawn_points)
 
         if args.number_of_vehicles < number_of_spawn_points:
             random.shuffle(spawn_points)
@@ -143,7 +127,7 @@ def run_simulation(args, client):
                 blueprint.set_attribute('driver_id', driver_id)
             
             if args.debug:
-                draw_spawnpoints(world, transform, is_list = 0)
+                draw_points(world, transform, is_list = 0)
             blueprint.set_attribute('role_name', 'autopilot')
             batch.append(SpawnActor(blueprint, transform).then(SetAutopilot(FutureActor, True)))
             spawn_points.pop(0)
@@ -181,6 +165,16 @@ def run_simulation(args, client):
             print('Ego-vehicle ready')
             # ego_vehicle.set_simulate_physics(False) #? 
 
+            # for point draw
+            if args.debug:
+                print("\nego vehicle spawn points", ego_transform)
+
+                # world origin point draw
+                draw_arrow(world)
+
+                # ego point draw
+                draw_points(world, ego_transform, color = [255,0,0], point_size = 0.1, time = 100, is_list = 0)
+
 
         traffic_manager.global_percentage_speed_difference(30.0)
 
@@ -189,12 +183,12 @@ def run_simulation(args, client):
         # Spawn sensors
         # -----------------------------
 
-        # Display Manager organize all the sensors an its display in a window
-        # If can easily configure the grid and the total window size
         display_manager = DisplayManager(grid_size=[3, 3], window_size=[1050, 1050])
 
-        # Then, SensorManager can be used to spawn RGBCamera, LiDARs and SemanticLiDARs as needed
-        # and assign each of them to a grid position, 
+        # fov
+        car_cam_fov = '70'
+        target_cam_fov = str(args.fov)
+        back_cam_fov = '110'
 
         #transform
         fl_transform = carla.Transform(carla.Location(1, -0.494631336551, 1.65),\
@@ -215,39 +209,41 @@ def run_simulation(args, client):
         print("height:", height,"meter per pixel:", x_m_per_pxl, "y_meter:", y_meter*2)
         t_transform = carla.Transform(carla.Location(0,0,height), carla.Rotation(-90, 0, 0))
         
-        car_cam_fov = '70'
+        
+        # camera setting
         fl_rgb = SensorManager(world, display_manager, 'RGBCamera', fl_transform, 
                       ego_vehicle, {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 0]) #front left
+            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 0], show = args.show) #front left
         f_rgb = SensorManager(world, display_manager, 'RGBCamera', f_transform, 
                       ego_vehicle, {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 1])#front
+            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 1], show = args.show)#front
         fr_rgb = SensorManager(world, display_manager, 'RGBCamera',fr_transform,ego_vehicle, \
             {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 2])#front right
+            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[0, 2], show = args.show)#front right
         
         
         t_sem = SensorManager(world, display_manager, 'SEMANTICCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-                'image_size_y': str(args.h), 'fov': str(args.fov)}, display_pos=[1, 0]) # target depth
+                'image_size_y': str(args.h), 'fov': target_cam_fov}, display_pos=[1, 0], show = args.show) # target depth
         t_rgb = SensorManager(world, display_manager, 'RGBCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-                'image_size_y': str(args.h), 'fov': str(args.fov)}, display_pos=[1, 1]) # target rgb
+                'image_size_y': str(args.h), 'fov': target_cam_fov}, display_pos=[1, 1], show = args.show) # target rgb
         t_depth = SensorManager(world, display_manager, 'DEPTHCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-                'image_size_y': str(args.h), 'fov': str(args.fov)}, display_pos=[1, 2]) # target segmentation
+                'image_size_y': str(args.h), 'fov': target_cam_fov}, display_pos=[1, 2], show = args.show) # target segmentation
         
         bl_rgb = SensorManager(world, display_manager, 'RGBCamera',bl_transform,
                       ego_vehicle, {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[2, 0])# back left rgb
+            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[2, 0], show = args.show)# back left rgb
         b_rgb = SensorManager(world, display_manager, 'RGBCamera',b_transform,
                       ego_vehicle, {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-            'image_size_y': str(args.h), 'fov': '110'}, display_pos=[2, 1])# back rgb
+            'image_size_y': str(args.h), 'fov': back_cam_fov}, display_pos=[2, 1], show = args.show)# back rgb
         br_rgb = SensorManager(world, display_manager, 'RGBCamera',br_transform,
                       ego_vehicle, {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
-            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[2, 2])# back right rgb
+            'image_size_y': str(args.h), 'fov': car_cam_fov}, display_pos=[2, 2], show = args.show)# back right rgb
         
         
+        # cam manage q list append
         q_list.append(fr_rgb.q)
         fr_rgb_idx = idx
         idx = idx+1
@@ -277,6 +273,7 @@ def run_simulation(args, client):
         idx = idx+1
         print("camera setting done")
 
+
         # Begin the loop
         time_sim = 0
         cc_depth_log = carla.ColorConverter.LogarithmicDepth
@@ -304,10 +301,10 @@ def run_simulation(args, client):
             
             # Check whether it's time to capture data
             if time_sim >= tick_sensor:
-                print('in while1')
+                # print('in while1')
 
                 data = [retrieve_data(q,nowFrame) for q in q_list]
-                print(all(x.frame == nowFrame for x in data if x is not None))
+                # print(all(x.frame == nowFrame for x in data if x is not None))
                 assert all(x.frame == nowFrame for x in data if x is not None)
 
                 # Skip if any sensor data is not available
@@ -324,70 +321,17 @@ def run_simulation(args, client):
                 b_rgb = data[b_rgb_idx]
                 br_rgb = data[br_rgb_idx]
                 bl_rgb = data[bl_rgb_idx]
-                
-                # Attach additional information to the snapshot
-                vehicles = cva.snap_processing(vehicles_raw, snap)
 
-                # Save depth image, RGB image, and Bounding Boxes data
-                if save_depth:
-                    depth_img.save_to_disk('out_depth/%06d.png' % depth_img.frame, cc_depth_log)
-                depth_meter = cva.extract_depth(depth_img)
-                # walker_filtered, walker_removed =  cva.auto_annotate(walkers, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
-                # walker_box_rgb = cva.save_output(rgb_img, walker_filtered['bbox'], walker_filtered['class'], walker_removed['bbox'], walker_removed['class'], save_patched=True, out_format='json')
-                
+                # for show & save object detection image
+                if args.show:
+                    show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth)
 
-                vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
-                vehicle_box_rgb = cva.save_output(rgb_img, vehicle_filtered['bbox'], vehicle_filtered['class'], \
-                    vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json')
-
-                # pygame display
-                if t_depth.display_man.render_enabled():
-                    vehicle_box_rgb = cv2.resize(vehicle_box_rgb, (350, 350)) 
-                    t_depth.surface = pygame.surfarray.make_surface(vehicle_box_rgb.swapaxes(0, 1))
-                
-                
-
-                
-                #-------------------Segmentation-------------------
-
-                H, W = segm_img.height, segm_img.width
-
-                np_seg = np.frombuffer(segm_img.raw_data, dtype=np.dtype("uint8")) 
-                np_seg = np.reshape(np_seg, (H, W, 4)) # RGBA format
-                np_seg = np_seg[:, :, :3] #  Take only RGB
-
-
-                # initialize lane, road segmentation
-                lane_road_seg = np.zeros((H, W, 3), dtype=np.uint8)
-
-
-                # get lane, road mask
-                lane_mask = (np_seg[:,:,2] == 6)
-                road_mask = (np_seg[:,:,2] == 7)
-
-                # create lane_seg
-                lane_road_seg[lane_mask, :] = (255, 255, 255)
-
-                # lane_seg
-                # lane_im = Image.fromarray(lane_road_seg)
-
-                # create road_seg
-                lane_road_seg[road_mask, :] = (114, 114, 114)
-
-                # Save segmentation image
-                if save_segm:
-                    segm_img = data[t_sem_idx]
-                    cc_segm = carla.ColorConverter.CityScapesPalette
-                    segm_img.save_to_disk('out_segm/%06d.png' % segm_img.frame, cc_segm)
-
-                
                 time_sim = 0
                 snapshot = world.get_snapshot()
                 print('timestamp: ',snapshot.timestamp)
             time_sim = time_sim + settings.fixed_delta_seconds
 
     finally:
-        cva.save2darknet(None,None,None,save_train=True)
         try:
             if display_manager:
                 display_manager.destroy()
@@ -396,11 +340,6 @@ def run_simulation(args, client):
 
 
         print('\ndestroying %d vehicles' % len(vehicles_list))
-        client.apply_batch([carla.command.DestroyActor(x) for x in vehicles_list])
-
-        if display_manager:
-            display_manager.destroy()
-
         client.apply_batch([carla.command.DestroyActor(x) for x in vehicles_list])
 
         world.apply_settings(original_settings)

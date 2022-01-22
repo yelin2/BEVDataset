@@ -26,6 +26,13 @@ from PIL import Image
 from PIL import ImageDraw
 from threading import Thread, Lock
 
+try:
+    import pygame
+    from pygame.locals import K_ESCAPE
+    from pygame.locals import K_q
+except ImportError:
+    raise RuntimeError('cannot import pygame, make sure pygame package is installed')
+
 
 def arg(argparser):
     
@@ -58,11 +65,28 @@ def arg(argparser):
         default=8000,
         type=int,
         help='port to communicate with TM (default: 8000)')
+    # ---------- minju add -------------- #
     argparser.add_argument(
         '-s', '--seed',
         metavar='S',
+        default=1,
         type=int,
         help='Set random device seed and deterministic mode for Traffic Manager')
+    argparser.add_argument(
+        '--show',
+        metavar='show',
+        default=False,
+        help='show camera image with pygame window ')
+    argparser.add_argument(
+        '--res',
+        metavar='WIDTHxHEIGHT',
+        default='1280x720',
+        help='window resolution (default: 1280x720)')
+    argparser.add_argument(
+        '-d','--debug',
+        metavar='debug',
+        default=False,
+        help='for debuging')
     #---------------cam setting----------------------------
     argparser.add_argument(
         '--w',
@@ -89,7 +113,7 @@ def arg(argparser):
         type=int,
         help='cam setting(fov)')
     #---------------cam setting----------------------------
-
+    # ---------- minju add -------------- #
     argparser.add_argument(
         '--sync',
         action='store_true',
@@ -100,19 +124,10 @@ def arg(argparser):
         action='store_false',
         help='Asynchronous mode execution')
     argparser.set_defaults(sync=True)
-    argparser.add_argument(
-        '--res',
-        metavar='WIDTHxHEIGHT',
-        default='1280x720',
-        help='window resolution (default: 1280x720)')
-    argparser.add_argument(
-        '-d','--debug',
-        metavar='debug',
-        default=False,
-        help='for debuging')
+    
     return argparser
 
-def retrieve_data(sensor_queue, frame, timeout=5):
+def retrieve_data(sensor_queue, frame, timeout=1):
     while True:
         try:
             data = sensor_queue.get(True,timeout)
@@ -120,6 +135,7 @@ def retrieve_data(sensor_queue, frame, timeout=5):
             return None
         if data.frame == frame:
             return data
+    
 def suffled(args, spawn_points, number_of_spawn_points):
     if args.number_of_vehicles < number_of_spawn_points:
         random.shuffle(spawn_points)
@@ -127,6 +143,7 @@ def suffled(args, spawn_points, number_of_spawn_points):
         msg = 'Requested %d vehicles, but could only find %d spawn points'
         logging.warning(msg, args.number_of_vehicles, number_of_spawn_points)
         args.number_of_vehicles = number_of_spawn_points
+    return spawn_points
 
 def metersetting(w, h, x_meter,  fov):
     '''
@@ -159,7 +176,7 @@ def carlaimg_to_np(carla_img):
     image = Image.fromarray(img_rgb, 'RGB')
     return(np.array(image))
 
-def draw_waypoints(world, waypoints = None, z=0.5):
+def draw_arrow(world, waypoints = None, z=0.5):
     """
     Draw a list of waypoints at a certain height given in z.
 
@@ -196,7 +213,7 @@ def draw_waypoints(world, waypoints = None, z=0.5):
             end = begin + carla.Location(x=math.cos(angle), y=math.sin(angle))
             world.debug.draw_arrow(begin, end, arrow_size=0.3, life_time=0)
 
-def draw_spawnpoints(world, spawnpoints, color = [255,255,0], point_size = 0.1, time = 10, is_list = 1):
+def draw_points(world, spawnpoints, color = [255,255,0], point_size = 0.1, time = 10, is_list = 1):
     """
     Draw a list of spawnpoints at a certain height given in z.
 
@@ -218,4 +235,21 @@ def draw_spawnpoints(world, spawnpoints, color = [255,255,0], point_size = 0.1, 
         print(location)
 
         world.debug.draw_point(location, size=point_size, color=carla.Color(color[0], color[1], color[2]), life_time=time)
+    
 
+def show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth):
+    # Attach additional information to the snapshot
+    vehicles = cva.snap_processing(vehicles_raw, snap)
+
+    # Save depth image, RGB image, and Bounding Boxes data
+    depth_meter = cva.extract_depth(depth_img)
+
+    vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, t_depth.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
+    vehicle_box_rgb = cva.save_output(rgb_img, vehicle_filtered['bbox'], vehicle_filtered['class'], \
+        vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json')
+
+    # pygame display
+    if t_depth.display_man.render_enabled():
+        vehicle_box_rgb = cv2.resize(vehicle_box_rgb, (350, 350)) 
+        t_depth.surface = pygame.surfarray.make_surface(vehicle_box_rgb.swapaxes(0, 1))
+                
