@@ -469,7 +469,7 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
         out_dict['others'] = add_data
     if out_format=='json' and second:
 
-        filename = path + 'vehicle_bbox/%06d.txt' % for_vehicle_img.frame
+        filename = path + 'vehicle_bbox%06d.txt' % for_vehicle_img.frame
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as outfile:
@@ -482,7 +482,7 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
     #         json.dump(out_dict, outfile, indent=4)   
 
     if out_format=='json' and not second:
-        filename = path + 'walker_bbox/%06d.txt' % carla_img.frame
+        filename = path + 'vehicle_bbox/%06d.txt' % carla_img.frame
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as outfile:
@@ -523,7 +523,7 @@ def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehi
             v2 = int(crop[1,1])
             crop_bbox = [(u1,v1),(u2,v2)]
             img_draw.rectangle(crop_bbox, outline ="red")
-        filename = path + 'out_rgb_bbox_walker/%06d.png' % carla_img.frame
+        filename = path + 'out_rgb_bbox_vehicle/%06d.png' % carla_img.frame
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         image.save(filename)

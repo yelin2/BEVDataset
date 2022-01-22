@@ -356,6 +356,7 @@ def run_simulation(args, client):
             traffic_manager.set_random_device_seed(args.seed)
             random.seed(args.seed)
 
+        # world = client.load_world('Town02')
         world = client.get_world()
  
         print('\nRUNNING in synchronous mode\n')
@@ -543,8 +544,8 @@ def run_simulation(args, client):
 
         # Spawn ego vehicle
         ego_blueprints_num = random.randint(0, len(ego_blueprints)-1)
-        # ego_random_num = random.randint(0, len(spawn_points)-1)
-        ego_random_num = 54
+        ego_random_num = random.randint(0, len(spawn_points)-1)
+        # ego_random_num = 54
         ego_transform = spawn_points[ego_random_num]
         ego_bp = ego_blueprints[ego_blueprints_num]
 
@@ -700,14 +701,13 @@ def run_simulation(args, client):
                 if save_depth:
                     depth_img.save_to_disk('out_depth/%06d.png' % depth_img.frame, cc_depth_log)
                 depth_meter = cva.extract_depth(depth_img)
-                walker_filtered, walker_removed =  cva.auto_annotate(walkers, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
-                walker_box_rgb = cva.save_output(rgb_img, walker_filtered['bbox'], walker_filtered['class'], walker_removed['bbox'], walker_removed['class'], save_patched=True, out_format='json')
+                # walker_filtered, walker_removed =  cva.auto_annotate(walkers, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
+                # walker_box_rgb = cva.save_output(rgb_img, walker_filtered['bbox'], walker_filtered['class'], walker_removed['bbox'], walker_removed['class'], save_patched=True, out_format='json')
                 
 
                 vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, t_rgb.sensor, depth_meter, json_path='vehicle_class_json_file.txt')
-                vehicle_box_rgb = cva.save_output(walker_box_rgb, vehicle_filtered['bbox'], vehicle_filtered['class'], \
-                    vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json', second = True, for_vehicle_img = rgb_img)
-                
+                vehicle_box_rgb = cva.save_output(rgb_img, vehicle_filtered['bbox'], vehicle_filtered['class'], \
+                    vehicle_removed['bbox'], vehicle_removed['class'], save_patched=True, out_format='json')
 
                 # pygame display
                 if t_depth.display_man.render_enabled():
