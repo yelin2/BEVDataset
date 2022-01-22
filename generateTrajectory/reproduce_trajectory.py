@@ -907,31 +907,18 @@ class CameraManager(object):
 # -- save_trajectory() ---------------------------------------------------------------
 # ==============================================================================
 
-def save_trajectory(traj, timestamp, args, running_time):
+def load_trajectory(json_path):
     
-    assert len(traj) == len(timestamp)
-    traj_dict = {}
-    traj_list = []
+    assert json_path is not None
 
-    
-    traj_dict['running_time'] = running_time
-    traj_dict['hz'] = args.hz
+    with open(json_path + 'trajectory.json', 'r') as js:
+        saved_json = json.load(js)
 
-    for i, (point, time) in enumerate(zip(traj, timestamp)):
-        traj_list.append({'seq': i,
-                    'time': time,
-                    'x':point.location.x,
-                    'y':point.location.y,
-                    'z':point.location.z,
-                    'roll':point.rotation.roll,
-                    'pitch':point.rotation.pitch,
-                    'yaw':point.rotation.yaw})
-    
-    traj_dict['trajectory'] = traj_list
+    total_time = saved_json['running_time']
+    hz = saved_json['hz']
+    traj = saved_json['trajectory']
 
-    print(f'total running time is {running_time}: saved {len(traj_list)} waypoints')
-    with open(args.traj_save_path + 'trajectory.json', 'w') as js:
-        json.dump(traj_dict, js, indent=4)
+    return total_time, hz, traj
 
 
 # ==============================================================================
@@ -957,7 +944,7 @@ def game_loop(args):
 
         hud = HUD(args.width, args.height)
         world = World(sim_world, hud, args)
-        controller = KeyboardControl(world, args.autopilot)
+        # controller = KeyboardControl(world, args.autopilot)
 
         sim_world.wait_for_tick()
 
@@ -967,27 +954,40 @@ def game_loop(args):
         traj = []
         timestamp = []
         cnt = 0
-        while True:
-            clock.tick_busy_loop(60)        #! roop rate 60Hz
-            if controller.parse_events(client, world, clock):
-                return
+
+        # load trajectory
+        total_time, hz, traj = load_trajectory(args.trajectory_path)
+
+        for waypoint in traj:
+
+            clock.tick_busy_loop(hz)        #! roop rate 60Hz
+
+            #! move vehicle
+            location = carla.Location(waypoint['x'],
+                                        waypoint['y'],
+                                        waypoint['z'])
+
+            rotation = carla.Rotation(waypoint['pitch'],
+                                        waypoint['yaw'],
+                                        waypoint['roll'])
+
+            transform = carla.Transform(location, rotation)
+            world.player.set_transform(transform)
+
             if not world.tick(clock):
                 return
-            if cnt == int(60 / args.hz):
-                traj.append(world.player.get_transform())
-                timestamp.append(time.time())
-                cnt = 0
+            
             cnt = cnt + 1
 
             world.render(display)
             pygame.display.flip()
         
             e = time.time()
-    
+
+        print(f'total reproduce time: {e-s} || total record time: {total_time}')
+
     finally:
 
-        if args.save_traj:
-            save_trajectory(traj, timestamp, args, e-s)
         if (world and world.recording_enabled):
             client.stop_recorder()
 
@@ -1042,21 +1042,10 @@ def main():
         '--keep_ego_vehicle',
         action='store_true',
         help='do not destroy ego vehicle on exit')
-    
-    #! need to set
     argparser.add_argument(
-        '--save_traj',
-        default=True,
-        help='save trajectory (default: True)')
-    argparser.add_argument(
-        '--traj_save_path',
+        '--trajectory_path',
         default='',
         help='save trajectory path (default: '')')
-    argparser.add_argument(
-        '--hz',
-        default='60',
-        type=int,
-        help='path save hz (default: '')')
 
     args = argparser.parse_args()
 
@@ -1067,7 +1056,6 @@ def main():
 
     logging.info('listening to server %s:%s', args.host, args.port)
 
-    print(__doc__)
 
     try:
 
