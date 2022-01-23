@@ -9,6 +9,7 @@
 ### For more information about CARLA Simulator, visit https://carla.org/
 
 from ast import While
+from fileinput import filename
 import glob
 import os
 import sys
@@ -39,6 +40,9 @@ from threading import Thread, Lock
 from utils import *
 from display_manager import DisplayManager
 from sensor_manager import SensorManager
+from save_utils import save_seg, save_rgb
+
+
 try:
     import pygame
     from pygame.locals import K_ESCAPE
@@ -64,6 +68,7 @@ def should_quit():
             if event.key == pygame.K_ESCAPE:
                 return True
     return False
+
 
 def run_simulation(args, client):
     vehicles_list = []
@@ -107,9 +112,9 @@ def run_simulation(args, client):
         SetAutopilot = carla.command.SetAutopilot
         FutureActor = carla.command.FutureActor
 
-        # --------------
-        # Spawn vehicles
-        # --------------
+        # ===============================================================================
+        #                                   Spawn vehicles
+        # ===============================================================================
         batch = []
         for n, transform in enumerate(spawn_points):
             if n >= args.number_of_vehicles:
@@ -140,9 +145,10 @@ def run_simulation(args, client):
 
         print('Created %d npc vehicles \n' % len(vehicles_list))
         
-        # -----------------------------
-        # Spawn ego vehicle and sensors
-        # -----------------------------
+
+        # ===============================================================================
+        #                           Spawn ego vehicle and sensors
+        # ===============================================================================
         q_list = []
         idx = 0
         
@@ -179,9 +185,9 @@ def run_simulation(args, client):
         traffic_manager.global_percentage_speed_difference(30.0)
 
 
-        # -----------------------------
-        # Spawn sensors
-        # -----------------------------
+        # ===============================================================================
+        #                                   Spawn sensors
+        # ===============================================================================
 
         display_manager = DisplayManager(grid_size=[3, 3], window_size=[1050, 1050])
 
@@ -274,9 +280,11 @@ def run_simulation(args, client):
         print("camera setting done")
 
 
-        # Begin the loop
+        # ===============================================================================
+        #                                   Begin the loop
+        # ===============================================================================
+        cnt = 0
         time_sim = 0
-        cc_depth_log = carla.ColorConverter.LogarithmicDepth
         call_exit = False
 
         # with CarlaSyncMode(world, fl_rgb.sensor, f_rgb.sensor, fr_rgb.sensor, t_sem.sensor ,t_rgb.sensor, t_depth.sensor 
@@ -303,6 +311,10 @@ def run_simulation(args, client):
             if time_sim >= tick_sensor:
                 # print('in while1')
 
+                # ===============================================================================
+                #                                   Get Data
+                # ===============================================================================
+
                 data = [retrieve_data(q,nowFrame) for q in q_list]
                 # print(all(x.frame == nowFrame for x in data if x is not None))
                 assert all(x.frame == nowFrame for x in data if x is not None)
@@ -322,10 +334,32 @@ def run_simulation(args, client):
                 br_rgb = data[br_rgb_idx]
                 bl_rgb = data[bl_rgb_idx]
 
+                # ===============================================================================
+                #                   Save bbox, instance Seg, vehicle Seg, RGB image
+                # ===============================================================================
+                
+                # save RGB image
+                save_rgb([f_rgb, fr_rgb, fl_rgb, b_rgb, br_rgb, bl_rgb, rgb_img], args, cnt)
+
+                # save vehicle semantic segmentation
+                save_seg(segm_img, args, cnt, clss = [10])
+
+                # save bbox & instance segmentation
+                
+
+
+
+                # ===============================================================================
+                #                               Save trajectory
+                # ===============================================================================
+
+
+
                 # for show & save object detection image
                 if args.show:
                     show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth)
 
+                cnt = cnt + 1
                 time_sim = 0
                 snapshot = world.get_snapshot()
                 print('timestamp: ',snapshot.timestamp)
