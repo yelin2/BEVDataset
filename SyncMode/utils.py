@@ -123,6 +123,32 @@ def arg(argparser):
         dest='sync',
         action='store_false',
         help='Asynchronous mode execution')
+
+    # -------------------- save ------------------- #
+    argparser.add_argument(
+        '--data_root',
+        default='/home/rml/ws/TestData',
+        type=str,
+        help='root data path, change if local machine changed')
+
+    argparser.add_argument(
+        '--scene_num',
+        default='/drive_001',
+        type=str,
+        help='driving scene number, change if driving scene changed')
+
+    argparser.add_argument(
+        '--is_static',
+        default=False,
+        type=bool,
+        help='True if static object save')
+
+    argparser.add_argument(
+        '--include_removed',
+        default=False,
+        type=bool,
+        help='True if save occluded bbox')
+
     argparser.set_defaults(sync=True)
     
     return argparser

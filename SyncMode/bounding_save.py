@@ -9,6 +9,7 @@
 ### For more information about CARLA Simulator, visit https://carla.org/
 
 from ast import While
+from copy import deepcopy
 from fileinput import filename
 import glob
 import os
@@ -40,18 +41,17 @@ from threading import Thread, Lock
 from utils import *
 from display_manager import DisplayManager
 from sensor_manager import SensorManager
-from save_utils import save_seg, save_rgb
+from save_utils import save_seg, save_rgb, save_bbox_instanceSeg, save_trajectory
 
 
-try:
-    import pygame
-    from pygame.locals import K_ESCAPE
-    from pygame.locals import K_q
-except ImportError:
-    raise RuntimeError('cannot import pygame, make sure pygame package is installed')
+# try:
+#     import pygame
+#     from pygame.locals import K_ESCAPE
+#     from pygame.locals import K_q
+# except ImportError:
+#     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
 
-save_rgb = True
 save_depth = False
 save_segm = False
 save_lidar = False
@@ -60,14 +60,14 @@ tick_sensor = 1
 log_mutex = Lock()
 v_concat = np.zeros((1200, 800, 3))
 
-def should_quit():
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return True
-        elif event.type == pygame.KEYUP:
-            if event.key == pygame.K_ESCAPE:
-                return True
-    return False
+# def should_quit():
+#     for event in pygame.event.get():
+#         if event.type == pygame.QUIT:
+#             return True
+#         elif event.type == pygame.KEYUP:
+#             if event.key == pygame.K_ESCAPE:
+#                 return True
+#     return False
 
 
 def run_simulation(args, client):
@@ -286,6 +286,7 @@ def run_simulation(args, client):
         cnt = 0
         time_sim = 0
         call_exit = False
+        traj, timestamps = [], []
 
         # with CarlaSyncMode(world, fl_rgb.sensor, f_rgb.sensor, fr_rgb.sensor, t_sem.sensor ,t_rgb.sensor, t_depth.sensor 
         #         ,bl_rgb.sensor ,b_rgb.sensor, br_rgb.sensor, fps=30) as sync_mode:
@@ -294,22 +295,20 @@ def run_simulation(args, client):
             # print('in while')
             # display_manager.clock.tick()
             nowFrame = world.tick()
-            display_manager.render()
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    call_exit = True
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == K_ESCAPE or event.key == K_q:
-                        call_exit = True
-                        break
+            # display_manager.render()
+            # for event in pygame.event.get():
+            #     if event.type == pygame.QUIT:
+            #         call_exit = True
+            #     elif event.type == pygame.KEYDOWN:
+            #         if event.key == K_ESCAPE or event.key == K_q:
+            #             call_exit = True
+            #             break
 
             if call_exit:
                 break
-            # print('in while9')
             
             # Check whether it's time to capture data
             if time_sim >= tick_sensor:
-                # print('in while1')
 
                 # ===============================================================================
                 #                                   Get Data
@@ -341,31 +340,48 @@ def run_simulation(args, client):
                 # save RGB image
                 save_rgb([f_rgb, fr_rgb, fl_rgb, b_rgb, br_rgb, bl_rgb, rgb_img], args, cnt)
 
+
                 # save vehicle semantic segmentation
                 save_seg(segm_img, args, cnt, clss = [10])
 
+
                 # save bbox & instance segmentation
-                
+                depth_meter = cva.extract_depth(depth_img)
 
+                vehicles_raw = world.get_actors().filter('vehicle.*')
+                vehicles = cva.snap_processing(vehicles_raw, snap)
 
+                vehicle_filtered, vehicle_removed =  cva.auto_annotate(vehicles, 
+                                                                        t_rgb.sensor, 
+                                                                        depth_meter, 
+                                                                        cls='vehicle')
+
+                save_bbox_instanceSeg(segm_img,
+                                    vehicle_filtered, 
+                                    vehicle_removed, 
+                                    args,
+                                    cnt)
 
                 # ===============================================================================
                 #                               Save trajectory
                 # ===============================================================================
+                traj.append(ego_vehicle.get_transform())
+                snapshot = world.get_snapshot()
+                timestamps.append(snapshot.timestamp)
 
 
 
                 # for show & save object detection image
-                if args.show:
-                    show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth)
+                # if args.show:
+                #     show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth)
 
                 cnt = cnt + 1
                 time_sim = 0
-                snapshot = world.get_snapshot()
                 print('timestamp: ',snapshot.timestamp)
             time_sim = time_sim + settings.fixed_delta_seconds
 
     finally:
+        save_trajectory(traj, timestamps, args)
         try:
             if display_manager:
                 display_manager.destroy()

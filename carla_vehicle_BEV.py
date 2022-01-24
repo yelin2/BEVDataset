@@ -27,29 +27,6 @@ import carla
 ### Calculate bounding boxes and apply the filter ###
 #####################################################
 
-### Use this function to get 2D bounding boxes of visible vehicles to camera using semantic LIDAR
-def auto_annotate_lidar(vehicles, camera, lidar_data, max_dist = 100, min_detect = 5, show_img = None, json_path = None):
-    filtered_data = filter_lidar(lidar_data, camera, max_dist)
-    if show_img != None:
-        show_lidar(filtered_data, camera, show_img)
-
-    ### Delete this section if object_idx issue has been fixed in CARLA
-    filtered_data = np.array([p for p in filtered_data if p.object_idx != 0])
-    filtered_data = get_points_id(filtered_data, vehicles, camera, max_dist)
-    ###
-    
-    visible_id, idx_counts = np.unique([p.object_idx for p in filtered_data], return_counts=True)
-    visible_vehicles = [v for v in vehicles if v.id in visible_id]
-    visible_vehicles = [v for v in vehicles if idx_counts[(visible_id == v.id).nonzero()[0]] >= min_detect]
-    bounding_boxes_2d = [get_2d_bb(vehicle, camera) for vehicle in visible_vehicles]
-    
-    filtered_out = {}
-    filtered_out['vehicles'] = visible_vehicles
-    filtered_out['bbox'] = bounding_boxes_2d
-    if json_path is not None:
-        filtered_out['class'] = get_vehicle_class(visible_vehicles, json_path)
-    return filtered_out, filtered_data
-
 ### Use this function to get 2D bounding boxes of visible vehicle to camera
 def auto_annotate(vehicles, camera, depth_img, max_dist=100, depth_margin=-1, patch_ratio=0.5, resize_ratio=0.5, cls=None):
     depth_show = False
@@ -65,46 +42,6 @@ def auto_annotate(vehicles, camera, depth_img, max_dist=100, depth_margin=-1, pa
     filtered_out, removed_out, _, _ = filter_occlusion_bbox(bounding_boxes_2d, vehicles, camera, depth_img, vehicle_class, depth_show, depth_margin, patch_ratio, resize_ratio)
     return filtered_out, removed_out 
 
-
-def save_obj_output(objs,
-                path = None,
-                image_id = None, 
-                out_format='pickle'):
-
-    out_list = []
-
-    assert (path is not None) and (image_id is not None)
-    assert (len(objs['bbox']) == len(objs['class'])) and \
-            (len(objs['segmentation']) == len(objs['class'])) and \
-            (len(objs['segmentation']) == len(objs['bbox']))
-
-    for bbox, cls, seg in zip(objs['bbox'], objs['class'], objs['segmentation']):
-        b_dict = {}
-        b_dict['bbox'] = bbox.tolist()
-        b_dict['class'] = cls
-        b_dict['segmentation'] = seg.tolist()
-        b_dict['image_id'] = image_id
-        out_list.append(b_dict)
-
-
-    if out_format=='json':
-        filename = path + '/' + image_id + '.txt'
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        with open(filename, 'w') as outfile:
-            json.dump(out_list, outfile, indent=4)
-
-
-### Same with auto_annotate(), but with debugging function for the occlusion filter
-def auto_annotate_debug(vehicles, camera, depth_img, depth_show=False, max_dist=100, depth_margin=-1, patch_ratio=0.5, resize_ratio=0.5, json_path=None):
-    vehicles = filter_angle_distance(vehicles, camera, max_dist)
-    bounding_boxes_2d = [get_2d_bb(vehicle, camera) for vehicle in vehicles]
-    if json_path is not None:
-        vehicle_class = get_vehicle_class(vehicles, json_path)
-    else:
-        vehicle_class = []
-    filtered_out, removed_out, depth_area, depth_show = filter_occlusion_bbox(bounding_boxes_2d, vehicles, camera, depth_img, vehicle_class, depth_show, depth_margin, patch_ratio, resize_ratio)
-    return filtered_out, removed_out, depth_area, depth_show
 
 
 #####################################################
@@ -482,85 +419,67 @@ def get_vehicle_class(vehicles, json_path=None):
 #######################################################
 
 ### Use this function to save the rgb image (with and without bounding box) and bounding boxes data 
-def save_output(carla_img, bboxes, vehicle_class=None, old_bboxes=None, old_vehicle_class=None, \
-    cc_rgb=carla.ColorConverter.Raw, path='', save_patched=False, add_data=None, out_format='pickle', second = False, for_vehicle_img = None):
-    # carla_img.save_to_disk(path + 'out_rgb/%06d.png' % carla_img.frame, cc_rgb)
-    
+def draw_output(carla_img, 
+                bboxes, 
+                vehicle_class=None, 
+                cc_rgb=carla.ColorConverter.Raw):
+
+    assert (len(bboxes) == len(vehicle_class))
+
+    carla_img.convert(cc_rgb)
+    img_bgra = np.array(carla_img.raw_data).reshape((carla_img.height,carla_img.width,4))
+    img_rgb = np.zeros((carla_img.height,carla_img.width,3))
+
+    img_rgb[:,:,0] = img_bgra[:,:,2]
+    img_rgb[:,:,1] = img_bgra[:,:,1]
+    img_rgb[:,:,2] = img_bgra[:,:,0]
+    img_rgb = np.uint8(img_rgb)
+    image = Image.fromarray(img_rgb, 'RGB')
+    img_draw = ImageDraw.Draw(image)  
+
+    for crop, cls in zip(bboxes, vehicle_class):
+        u1 = int(crop[0,0])
+        v1 = int(crop[0,1])
+        u2 = int(crop[1,0])
+        v2 = int(crop[1,1])
+        crop_bbox = [(u1,v1),(u2,v2)]
+        if cls == 'vehicle':
+            color = 'yellow'
+        elif cls == 'walker':
+            color = 'green'
+        # color = 'red' if (cls == 'vehicle') else 'blue'
+        # print(cls, color)
+        img_draw.rectangle(crop_bbox, outline = color)
+    return(np.array(image))
 
 
-    out_dict = {}
-    bboxes_list = [bbox.tolist() for bbox in bboxes]
-    out_dict['bboxes'] = bboxes_list
-    if vehicle_class is not None:
-        out_dict['vehicle_class'] = vehicle_class
-    if old_bboxes is not None:
-        old_bboxes_list = [bbox.tolist() for bbox in old_bboxes]
-        out_dict['removed_bboxes'] = old_bboxes_list
-    if old_vehicle_class is not None:
-        out_dict['removed_vehicle_class'] = old_vehicle_class
-    if add_data is not None:
-        out_dict['others'] = add_data
-    if out_format=='json' and second:
+def save_obj_output(objs,
+                path = None,
+                image_id = None, 
+                out_format='pickle'):
 
-        filename = path + 'vehicle_bbox%06d.txt' % for_vehicle_img.frame
+    out_list = []
+
+    assert (path is not None) and (image_id is not None)
+    assert (len(objs['bbox']) == len(objs['class'])) and \
+            (len(objs['segmentation']) == len(objs['class'])) and \
+            (len(objs['segmentation']) == len(objs['bbox']))
+
+    for bbox, cls, seg in zip(objs['bbox'], objs['class'], objs['segmentation']):
+        b_dict = {}
+        b_dict['bbox'] = bbox.tolist()
+        b_dict['class'] = cls
+        b_dict['segmentation'] = seg.tolist()
+        b_dict['image_id'] = image_id
+        out_list.append(b_dict)
+
+
+    if out_format=='json':
+        filename = path + '/' + image_id + '.txt'
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as outfile:
-            json.dump(out_dict, outfile, indent=4)
-    # else:
-    #     filename = path + 'out_bbox/%06d.pkl' % carla_img.frame
-    #     if not os.path.exists(os.path.dirname(filename)):
-    #         os.makedirs(os.path.dirname(filename))
-    #     with open(filename, 'w') as outfile:
-    #         json.dump(out_dict, outfile, indent=4)   
-
-    if out_format=='json' and not second:
-        filename = path + 'vehicle_bbox/%06d.txt' % carla_img.frame
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        with open(filename, 'w') as outfile:
-            json.dump(out_dict, outfile, indent=4)
-
-
-    if second: 
-        image = Image.fromarray(carla_img, 'RGB')
-        img_draw = ImageDraw.Draw(image)  
-        for crop in bboxes:
-            u1 = int(crop[0,0])
-            v1 = int(crop[0,1])
-            u2 = int(crop[1,0])
-            v2 = int(crop[1,1])
-            crop_bbox = [(u1,v1),(u2,v2)]
-            img_draw.rectangle(crop_bbox, outline ="blue")
-        filename = path + 'out_rgb_bbox_vehicle/%06d.png' % for_vehicle_img.frame
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        image.save(filename)
-        return(np.array(image))
-
-    if save_patched:
-        carla_img.convert(cc_rgb)
-        img_bgra = np.array(carla_img.raw_data).reshape((carla_img.height,carla_img.width,4))
-        img_rgb = np.zeros((carla_img.height,carla_img.width,3))
-
-        img_rgb[:,:,0] = img_bgra[:,:,2]
-        img_rgb[:,:,1] = img_bgra[:,:,1]
-        img_rgb[:,:,2] = img_bgra[:,:,0]
-        img_rgb = np.uint8(img_rgb)
-        image = Image.fromarray(img_rgb, 'RGB')
-        img_draw = ImageDraw.Draw(image)  
-        for crop in bboxes:
-            u1 = int(crop[0,0])
-            v1 = int(crop[0,1])
-            u2 = int(crop[1,0])
-            v2 = int(crop[1,1])
-            crop_bbox = [(u1,v1),(u2,v2)]
-            img_draw.rectangle(crop_bbox, outline ="red")
-        filename = path + 'out_rgb_bbox_vehicle/%06d.png' % carla_img.frame
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        image.save(filename)
-        return(np.array(image))
+            json.dump(out_list, outfile, indent=4)
 
         
     
