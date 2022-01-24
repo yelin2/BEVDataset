@@ -184,3 +184,16 @@ def save_trajectory(traj, timestamp, args):
 
     with open(path + '/timestamps.json', 'w') as js:
         json.dump(time_list, js, indent=4)
+
+
+
+def load_trajectory(json_path):
+    
+    assert json_path is not None
+
+    with open(json_path, 'r') as js:
+        traj = json.load(js)
+
+    # traj = saved_json['trajectory']
+
+    return traj

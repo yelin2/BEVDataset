@@ -36,7 +36,6 @@ import cv2
 import carla_vehicle_BEV as cva
 from PIL import Image
 from PIL import ImageDraw
-from threading import Thread, Lock
 
 from utils import *
 from display_manager import DisplayManager
@@ -57,8 +56,6 @@ save_segm = False
 save_lidar = False
 tick_sensor = 1
 
-log_mutex = Lock()
-v_concat = np.zeros((1200, 800, 3))
 
 # def should_quit():
 #     for event in pygame.event.get():
@@ -377,7 +374,8 @@ def run_simulation(args, client):
 
                 cnt = cnt + 1
                 time_sim = 0
-                print('timestamp: ',snapshot.timestamp)
+                print(f'saved data: time[{round(snapshot.timestamp.elapsed_seconds, 4)}] delta[{round(snapshot.timestamp.delta_seconds, 4)}]')
+            
             time_sim = time_sim + settings.fixed_delta_seconds
 
     finally:
