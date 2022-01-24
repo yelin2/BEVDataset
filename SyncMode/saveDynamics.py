@@ -90,6 +90,10 @@ def run_simulation(args, client):
         world.apply_settings(settings)
 
         blueprints = world.get_blueprint_library().filter('vehicle.*')
+        print("all vehicles num: ", len(blueprints))
+        blueprints = [x for x in blueprints if int(x.get_attribute('number_of_wheels')) == 4]
+        print("number_of_wheels=4 vehicles num: ",len(blueprints))
+
         ego_blueprints = world.get_blueprint_library().filter('vehicle.citroen.c3')
 
         spawn_points = world.get_map().get_spawn_points()
