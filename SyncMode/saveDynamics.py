@@ -54,7 +54,7 @@ from save_utils import save_seg, save_rgb, save_bbox_instanceSeg, save_trajector
 save_depth = False
 save_segm = False
 save_lidar = False
-tick_sensor = 1
+tick_sensor = 0
 
 
 # def should_quit():

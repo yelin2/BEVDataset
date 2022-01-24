@@ -48,7 +48,7 @@ except ImportError:
 save_depth = False
 save_segm = False
 save_lidar = False
-tick_sensor = 1
+tick_sensor = 0
 
 
 def should_quit():
@@ -182,6 +182,7 @@ def run_simulation(args, client):
         #                                   Begin the loop
         # ===============================================================================
         cnt = 0
+        time_sim = 0
         call_exit = False
         traj, timestamps = [], []
 
@@ -208,6 +209,8 @@ def run_simulation(args, client):
             # display_manager.clock.tick()
             
             nowFrame = world.tick()
+
+            print(nowFrame)
             # display_manager.render()
             # for event in pygame.event.get():
             #     if event.type == pygame.QUIT:
@@ -221,10 +224,10 @@ def run_simulation(args, client):
                 break
             
             # Check whether it's time to capture data
-
             # ===============================================================================
             #                                   Get Data
             # ===============================================================================
+
 
             data = [retrieve_data(q,nowFrame) for q in q_list]
             # print(all(x.frame == nowFrame for x in data if x is not None))
