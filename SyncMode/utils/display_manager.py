@@ -2,8 +2,6 @@
 import glob
 import os
 import sys
-import time
-import math
 
 try:
     sys.path.append(glob.glob('/opt/carla-simulator/PythonAPI/carla/dist/carla-*%d.7-%s.egg' % (
@@ -12,21 +10,6 @@ try:
 except IndexError:
     pass
 
-import carla
-
-import argparse
-import logging
-import random
-import queue
-import numpy as np
-from matplotlib import pyplot as plt
-import cv2
-import carla_vehicle_BEV as cva
-
-from PIL import Image
-from PIL import ImageDraw
-
-from threading import Thread, Lock
 
 try:
     import pygame

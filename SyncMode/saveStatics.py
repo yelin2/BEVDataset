@@ -8,13 +8,10 @@
 ### For a copy, see <https://opensource.org/licenses/MIT>
 ### For more information about CARLA Simulator, visit https://carla.org/
 
-from ast import While
-from copy import deepcopy
-from fileinput import filename
+
 import glob
 import os
 import sys
-import time
 
 try:
     sys.path.append(glob.glob('/opt/carla-simulator/PythonAPI/carla/dist/carla-*%d.7-%s.egg' % (
@@ -29,12 +26,11 @@ import argparse
 import logging
 import random
 import queue
-import carla_vehicle_BEV as cva
 
-from utils import *
-from display_manager import DisplayManager
-from sensor_manager import SensorManager
-from save_utils import save_seg, load_trajectory
+from utils.utils import *
+from utils.display_manager import DisplayManager
+from utils.sensor_manager import SensorManager
+from utils.save_utils import save_seg, load_trajectory
 
 
 try:
@@ -44,11 +40,6 @@ try:
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
-
-save_depth = False
-save_segm = False
-save_lidar = False
-tick_sensor = 0
 
 
 def should_quit():
@@ -65,17 +56,22 @@ def run_simulation(args, client):
     vehicles_list = []
 
     try:
+        # ===============================================================================
+        #                               Set World - Fixed Seed
+        # ===============================================================================
+
         traffic_manager = client.get_trafficmanager(args.tm_port)
         traffic_manager.set_global_distance_to_leading_vehicle(2.0)
         if args.seed is not None:
             traffic_manager.set_random_device_seed(args.seed)
             random.seed(args.seed)
 
-        # world = client.load_world('Town02')
+        # world = client.load_world('Town02')      #! need to set maps
         world = client.get_world()
         original_settings = world.get_settings()
 
- 
+
+        # sync mode + fixed delta time with 100Hz
         print('\nRUNNING in synchronous mode\n')
         settings = world.get_settings()
         traffic_manager.set_synchronous_mode(True)
@@ -83,7 +79,8 @@ def run_simulation(args, client):
         settings.fixed_delta_seconds = 0.01
         world.apply_settings(settings)
 
-        blueprints = world.get_blueprint_library().filter('vehicle.*')
+        # blueprints = world.get_blueprint_library().filter('vehicle.*')
+        # get ego vehicle's blue prints
         ego_blueprints = world.get_blueprint_library().filter('vehicle.citroen.c3')
 
         spawn_points = world.get_map().get_spawn_points()
@@ -147,13 +144,18 @@ def run_simulation(args, client):
         # fov
         target_cam_fov = str(args.fov)
 
-        #transform
+        # target camera's transform
         height, x_m_per_pxl, y_meter = metersetting(args.w, args.h, args.x_meter, args.fov)
         print("height:", height,"meter per pixel:", x_m_per_pxl, "y_meter:", y_meter*2)
         t_transform = carla.Transform(carla.Location(0,0,height), carla.Rotation(-90, 0, 0))
         
+
+        #? tick_sensor = call callback function rate after world.tick() in simulation
+        #? to synchronize, need to set this value = 0
+        tick_sensor = 0
         
-        # camera setting        
+        
+        # create target camera sensor         
         t_sem = SensorManager(world, display_manager, 'SEMANTICCamera', t_transform, ego_vehicle, \
                 {'sensor_tick': str(tick_sensor), 'image_size_x': str(args.w),
                 'image_size_y': str(args.h), 'fov': target_cam_fov}, display_pos=[1, 0], show = args.show) # target depth
@@ -182,17 +184,17 @@ def run_simulation(args, client):
         #                                   Begin the loop
         # ===============================================================================
         cnt = 0
-        time_sim = 0
         call_exit = False
-        traj, timestamps = [], []
 
 
+        # load trajectory
         json_path = args.data_root + args.scene_num + '/trajectory.json'
-
         traj = load_trajectory(json_path)
 
+        # follow trajectory
         for waypoint in traj:
 
+            # set ego-vehicle's waypoint
             location = carla.Location(waypoint['x'],
                                         waypoint['y'],
                                         waypoint['z'])
@@ -205,38 +207,35 @@ def run_simulation(args, client):
             print(transform)
             ego_vehicle.set_transform(transform)
 
-            # print('in while')
-            # display_manager.clock.tick()
-            
+            # run simulation
             nowFrame = world.tick()
 
-            print(nowFrame)
-            # display_manager.render()
-            # for event in pygame.event.get():
-            #     if event.type == pygame.QUIT:
-            #         call_exit = True
-            #     elif event.type == pygame.KEYDOWN:
-            #         if event.key == K_ESCAPE or event.key == K_q:
-            #             call_exit = True
-            #             break
+            # pygame rendering
+            display_manager.render()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    call_exit = True
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == K_ESCAPE or event.key == K_q:
+                        call_exit = True
+                        break
 
             if call_exit:
                 break
             
-            # Check whether it's time to capture data
             # ===============================================================================
             #                                   Get Data
             # ===============================================================================
 
-
+            # retrieve data from queue
             data = [retrieve_data(q,nowFrame) for q in q_list]
-            # print(all(x.frame == nowFrame for x in data if x is not None))
             assert all(x.frame == nowFrame for x in data if x is not None)
 
             # Skip if any sensor data is not available
             if None in data:
-                print(data)
                 continue
+
+            # get data from data queue
             vehicles_raw = world.get_actors().filter('vehicle.*')
             snap = data[tick_idx]
             rgb_img = data[t_rgb_idx]
@@ -249,13 +248,7 @@ def run_simulation(args, client):
             # ===============================================================================
 
             # save vehicle semantic segmentation
-            print('before save')
             save_seg(segm_img, args, cnt, clss = [5, 6, 7, 12, 18])
-
-            print('saved!')
-            # ===============================================================================
-            #                               Save trajectory
-            # ===============================================================================
             snapshot = world.get_snapshot()
 
 
@@ -263,13 +256,12 @@ def run_simulation(args, client):
             if args.show:
                 show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth)
 
+            print(f'saved {cnt} data: time[{round(snapshot.timestamp.elapsed_seconds, 4)}] delta[{round(snapshot.timestamp.delta_seconds, 4)}]')
             cnt = cnt + 1
-            time_sim = 0
-            print(f'saved data: time[{round(snapshot.timestamp.elapsed_seconds, 4)}] delta[{round(snapshot.timestamp.delta_seconds, 4)}]')
-            
+
 
     finally:
-        # save_trajectory(traj, timestamps, args)
+
         try:
             if display_manager:
                 display_manager.destroy()

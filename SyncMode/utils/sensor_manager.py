@@ -1,8 +1,6 @@
 import glob
 import os
 import sys
-import time
-import math
 
 try:
     sys.path.append(glob.glob('/opt/carla-simulator/PythonAPI/carla/dist/carla-*%d.7-%s.egg' % (
@@ -13,19 +11,11 @@ except IndexError:
 
 import carla
 
-import argparse
-import logging
-import random
+
 import queue
 import numpy as np
-from matplotlib import pyplot as plt
 import cv2
-import carla_vehicle_BEV as cva
 
-from PIL import Image
-from PIL import ImageDraw
-
-from threading import Thread, Lock
 
 try:
     import pygame
@@ -117,20 +107,6 @@ class SensorManager:
     
     def save_depth_image(self, image):
         self.q.put(image)
-
-
-        # if self.show:
-            
-            # image.convert(carla.ColorConverter.LogarithmicDepth)
-            # array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
-            # array = np.reshape(array, (image.height, image.width, 4))
-            # array = array[:, :, :3]
-            # array = array[:, :, ::-1]
-            # array = cv2.resize(array, (350, 350)) 
-
-
-            # if self.display_man.render_enabled():
-            #     self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
     
     def save_semantic_image(self, image):

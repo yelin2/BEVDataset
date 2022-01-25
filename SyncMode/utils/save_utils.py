@@ -12,11 +12,17 @@ except IndexError:
 import json
 import numpy as np
 import cv2
-import carla_vehicle_BEV as cva
+from utils import carla_vehicle_BEV as cva
 
 
 
 def save_rgb(rgbs, args, cnt):
+    '''
+    save surround view RGB images
+
+    Inputs
+        rgbs(list): list of carla.Image
+    '''
     imgs_path = args.data_root + args.scene_num
 
     for i, rgb in enumerate(rgbs):
@@ -43,12 +49,22 @@ def save_rgb(rgbs, args, cnt):
 def save_seg(seg_raw, args, cnt, clss = None):
 
     '''
-    5: pole
-    6: lane
-    7: road
-    10: vehicles
-    12: traffic sign
-    18: traffic light
+    save semantic class map to RGB image
+
+    Input
+        seg_raw(carla.Image): BEV Semantic Segmentation Map
+        clss(list): class to create segmentation target
+    
+    mapping
+        keys: class value in carla segmentation
+        values: RGB value in BEV target
+            (keys) |(value)
+                5  | pole
+                6  | lane
+                7  | road
+                10 | vehicles
+                12 | traffic sign
+                18 | traffic light
     '''
     assert clss is not None, 'check segmentation class!'
 
@@ -94,6 +110,22 @@ def save_seg(seg_raw, args, cnt, clss = None):
 
 
 def save_bbox_instanceSeg(seg_raw, filtered, removed, args, cnt):
+    '''
+    save bounding box & instance segmentation target in txt file
+
+    Input:
+        seg_raw(carla.Image)
+        filtered(list of dict)
+        removed(list of dict)
+    
+    Output:
+        list of dictionary
+            (keys) |(value)
+             bbox  | bbox's left-top, right-bottom point
+            class  | bbox's class
+     segmentation  | instance segmentation pixels (x coord, y coord)
+         image_id  | bbox's image id
+    '''
     objs = {}
     if args.include_removed:
         objs['bbox'] = filtered['bbox'] + removed['bbox']
@@ -148,16 +180,23 @@ def save_bbox_instanceSeg(seg_raw, filtered, removed, args, cnt):
 
 
 def save_trajectory(traj, timestamp, args):
+    '''
+    save trajectory to json file
     
+    Input:
+        traj(list of carla.Transform): saved trajectory
+        timestamp(list of carla.Timestamps): saved simulation time
+    
+    Output:
+        trajectory.json
+        timestamps.json
+    '''
     assert len(traj) == len(timestamp)
-    # traj_dict = {}
+
     traj_list = []
     time_list = []
 
-    
-    # traj_dict['running_time'] = running_time
-    # traj_dict['hz'] = args.hz
-
+    # convert traj, timestamp to list
     for i, (point, time) in enumerate(zip(traj, timestamp)):
         traj_list.append({'seq': i,
                     'time': time.elapsed_seconds,
@@ -171,14 +210,15 @@ def save_trajectory(traj, timestamp, args):
         time_list.append({'time': time.elapsed_seconds,
                             'hz': time.delta_seconds})
 
-    # traj_dict['trajectory'] = traj_list
 
+    # determine save path
     path = args.data_root + args.scene_num
 
     if not os.path.isdir(path):
         os.makedirs(path)
 
-    # print(f'total running time is {running_time}: saved {len(traj_list)} waypoints')
+
+    # save trajectory, timesamps
     with open(path + '/trajectory.json', 'w') as js:
         json.dump(traj_list, js, indent=4)
 
@@ -188,12 +228,12 @@ def save_trajectory(traj, timestamp, args):
 
 
 def load_trajectory(json_path):
-    
+    '''
+    load json trajectory file
+    '''
     assert json_path is not None
 
     with open(json_path, 'r') as js:
         traj = json.load(js)
-
-    # traj = saved_json['trajectory']
 
     return traj
