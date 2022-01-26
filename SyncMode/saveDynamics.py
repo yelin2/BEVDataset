@@ -339,6 +339,13 @@ def run_simulation(args, client):
                 br_rgb = data[br_rgb_idx]
                 bl_rgb = data[bl_rgb_idx]
 
+                # ===============================================================================
+                #                   show Object Detection Image, if args.show = True
+                # ===============================================================================
+
+                if args.show:
+                    show_od_image(vehicles_raw, snap, depth_img, rgb_img, t_depth)
+
 
                 # ===============================================================================
                 #                   Save bbox, instance Seg, vehicle Seg, RGB image
