@@ -86,12 +86,6 @@ def arg(argparser):
     #            camera settings
     # =====================================
     argparser.add_argument(
-        '--res',
-        metavar='WIDTHxHEIGHT',
-        default='1280x720',
-        help='window resolution (default: 1280x720)')
-
-    argparser.add_argument(
         '--w',
         metavar='W',
         default=964,
