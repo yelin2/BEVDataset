@@ -27,7 +27,7 @@ except ImportError:
 
 
 class SensorManager:
-    def __init__(self, world, display_man, sensor_type, transform, attached, sensor_options, display_pos, show = False):
+    def __init__(self, world, display_man, sensor_type, transform, attached, sensor_options=None, display_pos=None, show = False):
         self.surface = None
         self.world = world
         self.display_man = display_man
@@ -41,7 +41,7 @@ class SensorManager:
         self.show = show
     
 
-    def init_sensor(self, sensor_type, transform, attached, sensor_options):
+    def init_sensor(self, sensor_type, transform, attached, sensor_options=None):
         if sensor_type == 'RGBCamera':
             camera_bp = self.world.get_blueprint_library().find('sensor.camera.rgb')
             disp_size = self.display_man.get_display_size()
@@ -84,6 +84,19 @@ class SensorManager:
 
             return camera
         
+        elif sensor_type == 'GNSS':
+            gps_bp = self.world.get_blueprint_library().find('sensor.other.gnss')
+            gps = self.world.spawn_actor(gps_bp, transform, attach_to=attached, attachment_type=carla.AttachmentType.Rigid)
+            gps.listen(self.save_gps)
+
+            return gps
+
+        elif sensor_type == 'IMU':
+            imu_bp = self.world.get_blueprint_library().find('sensor.other.imu')
+            imu = self.world.spawn_actor(imu_bp, transform, attach_to=attached, attachment_type=carla.AttachmentType.Rigid)
+            imu.listen(self.save_data)
+            return imu
+
         else:
             return None
 
@@ -108,7 +121,12 @@ class SensorManager:
     def save_depth_image(self, image):
         self.q.put(image)
 
-    
+    def save_data(self, data):
+        self.q.put(data)
+
+    def save_gps(self, data):
+        self.q.put(data)
+
     def save_semantic_image(self, image):
         self.q.put(image)
 

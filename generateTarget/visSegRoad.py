@@ -50,7 +50,22 @@ save_segm = False
 save_lidar = False
 tick_sensor = 1
 
+def metersetting(w, h, x_meter,  fov):
+    '''
+        w, h, x_meter, fov -> cam height & meter per pixel calculate
+    '''
+    fx = w /(2 * np.tan(fov * np.pi / 360))
+    fy = h /(2 * np.tan(fov * np.pi / 360))
+    cx = w/2
+    cy = h/2
 
+    x_rad = np.radians(fov/2)
+    x_meter = x_meter/2
+    cam_height = x_meter/np.tan(x_rad)
+
+    x_mpp = x_meter/w
+    y_meter = x_mpp * h
+    return cam_height, x_mpp, y_meter
 
 def main():
 
@@ -144,7 +159,7 @@ def main():
         
 
         # -----------------------------
-        # Spawn ego vehicle and cameras
+        # Spawn ego vehicle
         # -----------------------------
         q_list = []
         idx = 0
@@ -156,33 +171,38 @@ def main():
         idx = idx+1
 
         # Spawn ego vehicle
-        ego_bp = random.choice(blueprints)
+        ego_blueprints = world.get_blueprint_library().filter('vehicle.citroen.c3')
+        ego_blueprints_num = random.randint(0, len(ego_blueprints)-1)
+        ego_bp = ego_blueprints[ego_blueprints_num]
+        # ego_bp = random.choice(blueprints)
         ego_transform = random.choice(spawn_points)
         ego_vehicle = world.spawn_actor(ego_bp, ego_transform)
         vehicles_list.append(ego_vehicle)
         ego_vehicle.set_autopilot(True)
         print('Ego-vehicle ready')
 
-        # Spawn RGB camera
-        t_sem_location = carla.Location(0,0,50)     #! BEV transform
+
+        # -----------------------------
+        # Spawn BEV Seg Camera
+        # -----------------------------
+        bev_resolution = 512
+        bev_meter = 25
+        fov = 70
+        height, x_m_per_pxl, y_meter = metersetting(bev_resolution, 
+                                                    bev_resolution, 
+                                                    bev_meter, fov)
+
+        t_sem_location = carla.Location(bev_meter/2+1,0,height)     #! BEV transform
         t_sem_rotation = carla.Rotation(-90, 0, 0)
         cam_transform = carla.Transform(t_sem_location, t_sem_rotation)
-        cam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
-        cam_bp.set_attribute('sensor_tick', str(tick_sensor))
-        cam = world.spawn_actor(cam_bp, cam_transform, attach_to=ego_vehicle)
-        nonvehicles_list.append(cam)
-        cam_queue = queue.Queue()
-        cam.listen(cam_queue.put)
-        q_list.append(cam_queue)
-        cam_idx = idx
-        idx = idx+1
-        print('RGB camera ready')
 
-
-        # Spawn segmentation camera
         segm_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
         segm_bp.set_attribute('sensor_tick', str(tick_sensor))
+        segm_bp.set_attribute('image_size_x', str(bev_resolution))
+        segm_bp.set_attribute('image_size_y', str(bev_resolution))
+        segm_bp.set_attribute('fov', str(fov))
         segm = world.spawn_actor(segm_bp, cam_transform, attach_to=ego_vehicle)
+        
         cc_segm = carla.ColorConverter.CityScapesPalette
         nonvehicles_list.append(segm)
         segm_queue = queue.Queue()
@@ -193,11 +213,53 @@ def main():
         print('Segmentation camera ready')
 
 
+        # -----------------------------
+        # Spawn Front RGB Camera
+        # -----------------------------
+        f_location = carla.Location(1, 0.0159456324149, 1.65)
+        f_rotation = carla.Rotation(0.04612719483860205, -(-90.32322642770004 + 90), -90.32571568590001+ 90)
+        fcam_transform = carla.Transform(f_location, f_rotation)
+        fcam_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+        fcam_bp.set_attribute('sensor_tick', str(tick_sensor))
+        fcam_bp.set_attribute('image_size_x', str(512))
+        fcam_bp.set_attribute('image_size_y', str(512))
+        fcam_bp.set_attribute('fov', str(70))
+        fcam = world.spawn_actor(fcam_bp, fcam_transform, attach_to=ego_vehicle)
+        
+        nonvehicles_list.append(fcam)
+        fcam_queue = queue.Queue()
+        fcam.listen(fcam_queue.put)
+        q_list.append(fcam_queue)
+        fcam_idx = idx
+        idx = idx+1
+        print('front camera ready')
+
+
+        # -----------------------------
+        # Spawn Front Segmentation Camera
+        # -----------------------------
+        fseg_bp = world.get_blueprint_library().find('sensor.camera.semantic_segmentation')
+        fseg_bp.set_attribute('sensor_tick', str(tick_sensor))
+        fseg_bp.set_attribute('image_size_x', str(512))
+        fseg_bp.set_attribute('image_size_y', str(512))
+        fseg_bp.set_attribute('fov', str(70))
+        fseg = world.spawn_actor(fseg_bp, fcam_transform, attach_to=ego_vehicle)
+        
+        nonvehicles_list.append(fseg)
+        fseg_queue = queue.Queue()
+        fseg.listen(fseg_queue.put)
+        q_list.append(fseg_queue)
+        fseg_idx = idx
+        idx = idx+1
+        print('front seg camera ready')
+
+
 
         # -----------------------------
         #       Begin the loop
         # -----------------------------
         time_sim = 0
+        cnt = 0
         while True:
             # Extract the available data
             nowFrame = world.tick()
@@ -211,21 +273,35 @@ def main():
                 if None in data:
                     continue
 
-                
-                # -----------------------------
-                #         Get RGB Image
-                # -----------------------------
-                rgb_img = data[cam_idx]
 
-                H, W = rgb_img.height, rgb_img.width
-
-                np_rgb = np.frombuffer(rgb_img.raw_data, dtype=np.dtype("uint8")) 
-                np_rgb = np.reshape(np_rgb, (H, W, 4)) # RGBA format
-                np_rgb = np_rgb[:, :, :3] #  Take only RGB
-
-                                
                 # -----------------------------
-                #        Get Segmentation
+                #         Get front rgb Image
+                # -----------------------------
+                frgb_img = data[fcam_idx]
+
+                H, W = frgb_img.height, frgb_img.width
+
+                np_frgb = np.frombuffer(frgb_img.raw_data, dtype=np.dtype("uint8")) 
+                np_frgb = np.reshape(np_frgb, (H, W, 4)) # RGBA format
+                np_frgb = np_frgb[:, :, :3] #  Take only RGB
+
+
+                # -----------------------------
+                #         Get front rgb Image
+                # -----------------------------
+                fseg_img = data[fseg_idx]
+
+                H, W = fseg_img.height, fseg_img.width
+
+                np_fseg = np.frombuffer(fseg_img.raw_data, dtype=np.dtype("uint8")) 
+                np_fseg = np.reshape(np_fseg, (H, W, 4)) # RGBA format
+                np_fseg = np_fseg[:, :, :3] #  Take only RGB
+
+                #! TODO: np_fseg[:,:,2] convert to color
+
+
+                # -----------------------------
+                #        Get BEV Segmentation
                 # -----------------------------
                 segm_img = data[segm_idx]
 
@@ -240,22 +316,34 @@ def main():
                 lane_road_seg = np.zeros((H, W, 3), dtype=np.uint8)
 
 
-                # get lane, road, vehicle mask
+                # get lane, road mask
                 lane_mask = (np_seg[:,:,2] == 6)
                 road_mask = (np_seg[:,:,2] == 7)
-                traffic_light_mask = np.logical_or((np_seg[:,:,2]==18), (np_seg[:,:,2]==5))
-                traffic_light_mask = np.logical_or(traffic_light_mask, (np_seg[:,:,2]==12))
+
+                # 18: trafficLight, 5: Pole, 12: trafficSign
+                # traffic_light_mask = np.logical_or((np_seg[:,:,2]==18), (np_seg[:,:,2]==5))     
+                # traffic_light_mask = np.logical_or(traffic_light_mask, (np_seg[:,:,2]==12))
 
                 # create lane_seg, road_seg
                 lane_road_seg[lane_mask, :] = (255, 255, 255)
                 lane_road_seg[road_mask, :] = (114, 114, 114)
-                lane_road_seg[traffic_light_mask, :] = (100, 100, 100)
+                # lane_road_seg[traffic_light_mask, :] = (100, 100, 100)
+
 
 
                 # -----------------------------
                 #        Concat RGB, Seg
                 # -----------------------------
-                v_concat = cv2.hconcat([np_rgb, lane_road_seg])
+                v_concat = cv2.hconcat([np_frgb, lane_road_seg])
+
+                # save target
+                import matplotlib.pyplot as plt
+                filename = '{0:010d}'.format(cnt)
+                plt.imsave(f'target/frgb/{filename}.png', np_frgb)
+                fseg_img.save_to_disk(f'target/fseg/{filename}.png', carla.ColorConverter.CityScapesPalette)
+                # plt.imsave(f'target/fseg/{filename}.png', lane_road_seg[:,:,0])
+                plt.imsave(f'target/bev/{filename}.png', lane_road_seg[:,:,0], cmap='gray')
+                cnt = cnt+1
 
                 # * Pygame plot * #
                 opencv_image = v_concat[:,:,::-1]  #Since OpenCV is BGR and pygame is RGB, it is necessary to convert it.
@@ -273,7 +361,6 @@ def main():
 
     finally:
         try:
-            cam.stop()
             if save_segm:
                 segm.stop()
         except:
