@@ -4,7 +4,7 @@ import numpy as np
 from glob import glob
 
 # read & refine
-filenames = glob('target/bev/*.png')
+filenames = glob('/Users/yelin/Downloads/target_long/bev/6030m640320p_filtered/*.png')
 
 
 for filename in filenames:
